@@ -17,7 +17,7 @@ export function CoachLayout({ children }: { children: React.ReactNode }) {
         <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900 px-4 sm:px-6 lg:px-8">
           <div className="lg:hidden flex items-center gap-3 text-base font-bold text-gray-900 dark:text-white">
             <Image 
-              src="/HLSSA_logo.png" 
+              src="/HLS_logo.png" 
               alt="HLS Soccer Academy Logo" 
               width={32} 
               height={32} 

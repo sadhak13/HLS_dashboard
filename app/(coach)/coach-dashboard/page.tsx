@@ -4,6 +4,8 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { createClient } from '@/lib/supabase/client';
 import { Users, IndianRupee, CalendarDays, CheckCircle2 } from 'lucide-react';
+import { StatCard } from '@/components/ui/StatCard';
+import { GlassCard } from '@/components/ui/GlassCard';
 
 interface CoachDashboardStats {
   branchName: string;
@@ -75,61 +77,88 @@ export default function CoachDashboardPage() {
   }, [fetchSummary]);
 
   return (
-    <div className="space-y-6">
-      <div>
-        <p className="text-sm font-medium text-green-600">Coach overview</p>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Welcome back, {profile?.full_name || 'Coach'}</h1>
-        <p className="text-sm text-gray-500 dark:text-gray-400">Here is a snapshot for {stats.branchName}.</p>
+    <div className="space-y-8">
+      {/* Header */}
+      <div className="space-y-2">
+        <p className="text-sm font-semibold text-green-500 uppercase tracking-wider">Coach Overview</p>
+        <h1 className="text-4xl font-bold text-white">Welcome back, {profile?.full_name || 'Coach'}</h1>
+        <p className="text-base text-gray-400">Here is a snapshot for {stats.branchName}</p>
       </div>
 
       {isLoading ? (
-        <div className="flex items-center justify-center rounded-xl border border-dashed border-gray-300 bg-white p-10 dark:border-gray-700 dark:bg-gray-800">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-green-600 border-t-transparent" />
+        <div className="flex items-center justify-center rounded-2xl backdrop-blur-xl bg-white/[0.03] border border-white/10 p-16">
+          <div className="relative">
+            <div className="h-12 w-12 animate-spin rounded-full border-4 border-green-500/20 border-t-green-500" />
+            <div className="absolute inset-0 h-12 w-12 animate-ping rounded-full border-4 border-green-500/10" />
+          </div>
         </div>
       ) : (
         <>
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
-              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
-                <Users className="h-5 w-5" />
-              </div>
-              <p className="text-sm text-gray-500">Active players</p>
-              <p className="text-2xl font-semibold text-gray-900 dark:text-white">{stats.activePlayers}</p>
-            </div>
-
-            <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
-              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
-                <IndianRupee className="h-5 w-5" />
-              </div>
-              <p className="text-sm text-gray-500">Pending fees</p>
-              <p className="text-2xl font-semibold text-gray-900 dark:text-white">₹{stats.pendingAmount.toLocaleString('en-IN')}</p>
-            </div>
-
-            <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
-              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
-                <CheckCircle2 className="h-5 w-5" />
-              </div>
-              <p className="text-sm text-gray-500">Present today</p>
-              <p className="text-2xl font-semibold text-gray-900 dark:text-white">{stats.presentCount}</p>
-            </div>
-
-            <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
-              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">
-                <CalendarDays className="h-5 w-5" />
-              </div>
-              <p className="text-sm text-gray-500">Absent today</p>
-              <p className="text-2xl font-semibold text-gray-900 dark:text-white">{stats.absentCount}</p>
-            </div>
+          {/* Stats Grid */}
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <StatCard
+              title="Active Players"
+              value={stats.activePlayers}
+              icon={Users}
+              iconColor="text-green-500"
+            />
+            <StatCard
+              title="Pending Fees"
+              value={`₹${stats.pendingAmount.toLocaleString('en-IN')}`}
+              icon={IndianRupee}
+              iconColor="text-amber-500"
+            />
+            <StatCard
+              title="Present Today"
+              value={stats.presentCount}
+              icon={CheckCircle2}
+              iconColor="text-blue-500"
+            />
+            <StatCard
+              title="Absent Today"
+              value={stats.absentCount}
+              icon={CalendarDays}
+              iconColor="text-red-500"
+            />
           </div>
 
-          <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-800">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">What you can do next</h2>
-            <ul className="mt-3 space-y-2 text-sm text-gray-600 dark:text-gray-400">
-              <li>• Mark today's attendance for your players.</li>
-              <li>• Review and update fee records for your branch.</li>
-              <li>• Keep an eye on pending dues to support better follow-up.</li>
+          {/* Quick Actions Card */}
+          <GlassCard title="What you can do next" className="relative overflow-hidden">
+            {/* Decorative gradient */}
+            <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-green-500/10 to-transparent rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
+
+            <ul className="relative space-y-4">
+              <li className="flex items-start gap-4 p-4 rounded-xl hover:bg-white/5 transition-all group">
+                <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-green-500/10 border border-green-500/20 flex items-center justify-center group-hover:scale-110 transition-transform">
+                  <CheckCircle2 className="w-5 h-5 text-green-500" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-white">Mark today's attendance</p>
+                  <p className="text-xs text-gray-400 mt-1">Keep track of your players' presence</p>
+                </div>
+              </li>
+
+              <li className="flex items-start gap-4 p-4 rounded-xl hover:bg-white/5 transition-all group">
+                <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center group-hover:scale-110 transition-transform">
+                  <IndianRupee className="w-5 h-5 text-amber-500" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-white">Review fee records</p>
+                  <p className="text-xs text-gray-400 mt-1">Update and manage payment status for your branch</p>
+                </div>
+              </li>
+
+              <li className="flex items-start gap-4 p-4 rounded-xl hover:bg-white/5 transition-all group">
+                <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center group-hover:scale-110 transition-transform">
+                  <CalendarDays className="w-5 h-5 text-blue-500" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-white">Monitor pending dues</p>
+                  <p className="text-xs text-gray-400 mt-1">Keep an eye on outstanding payments for better follow-up</p>
+                </div>
+              </li>
             </ul>
-          </div>
+          </GlassCard>
         </>
       )}
     </div>

@@ -35,7 +35,7 @@ export function Sidebar({ isOpen, setIsOpen }: { isOpen: boolean; setIsOpen: (va
         <div className="flex h-16 items-center justify-center border-b border-gray-800 bg-gray-950">
           <div className="flex items-center gap-3 font-bold text-lg text-white">
             <Image 
-              src="/HLSSA_logo.png" 
+              src="/HLS_logo.png" 
               alt="HLS Soccer Academy Logo" 
               width={32} 
               height={32} 
