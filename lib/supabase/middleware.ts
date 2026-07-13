@@ -28,7 +28,17 @@ export async function updateSession(request: NextRequest) {
   )
 
   // Refresh session cookie
-  const { data: { user } } = await supabase.auth.getUser()
+  const { data: { user }, error: authError } = await supabase.auth.getUser()
+
+  // If refresh token is stale/invalid, treat as unauthenticated (no error spam)
+  if (authError && authError.status === 400) {
+    const { pathname } = request.nextUrl
+    const isPublic = PUBLIC_ROUTES.some((r) => pathname.startsWith(r))
+    if (!isPublic) {
+      return NextResponse.redirect(new URL('/login', request.url))
+    }
+    return supabaseResponse
+  }
 
   const { pathname } = request.nextUrl
 

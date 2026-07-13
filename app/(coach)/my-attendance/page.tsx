@@ -18,9 +18,8 @@ interface AttendanceState {
 }
 
 function getTodayString() {
-  // Use Indian Standard Time (IST) - UTC+5:30
   const now = new Date();
-  const istOffset = 5.5 * 60 * 60 * 1000; // 5 hours 30 minutes in milliseconds
+  const istOffset = 5.5 * 60 * 60 * 1000;
   const istDate = new Date(now.getTime() + istOffset);
   return istDate.toISOString().split('T')[0];
 }
@@ -49,14 +48,11 @@ export default function CoachAttendancePage() {
     if (!profile) return;
     setIsLoading(true);
 
-    // 1. Get the coach's branch
-    // Try using the RPC function first
     const { data: rpcBranchId, error: rpcError } = await supabase.rpc('get_coach_branch_id');
 
     let resolvedBranchId: string = (rpcBranchId as any) as string;
-    
+
     if (rpcError || !resolvedBranchId) {
-      console.warn('RPC failed or returned null, falling back to direct table query...', rpcError);
       const { data: coachData } = await (supabase as any)
         .from('coaches')
         .select('branch_id')
@@ -66,10 +62,9 @@ export default function CoachAttendancePage() {
       if (!coachData) { setIsLoading(false); return; }
       resolvedBranchId = coachData.branch_id;
     }
-    
+
     setBranchId(resolvedBranchId as string);
 
-    // 2. Get all active players in this branch
     const { data: playersData } = await supabase
       .from('players')
       .select('id, full_name, status')
@@ -80,7 +75,6 @@ export default function CoachAttendancePage() {
     const playerList = (playersData as Array<{ id: string; full_name: string; status: string }>) ?? [];
     setPlayers(playerList as Player[]);
 
-    // 3. Check if attendance was already submitted today
     if (playerList.length > 0) {
       const { data: existingAttendance } = await supabase
         .from('attendance')
@@ -96,7 +90,6 @@ export default function CoachAttendancePage() {
         });
         setAttendance(existing);
       } else {
-        // Default everyone to 'present'
         const defaults: AttendanceState = {};
         playerList.forEach((p) => { defaults[p.id] = 'present'; });
         setAttendance(defaults);
@@ -155,6 +148,7 @@ export default function CoachAttendancePage() {
 
   const presentCount = Object.values(attendance).filter((s) => s === 'present').length;
   const absentCount = Object.values(attendance).filter((s) => s === 'absent').length;
+  const attendancePct = players.length > 0 ? Math.round((presentCount / players.length) * 100) : 0;
 
   const filteredPlayers = players.filter(player =>
     player.full_name.toLowerCase().includes(searchQuery.toLowerCase())
@@ -163,72 +157,93 @@ export default function CoachAttendancePage() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
-        <svg className="w-8 h-8 text-green-600 animate-spin" fill="none" viewBox="0 0 24 24">
-          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-        </svg>
+        <div className="w-8 h-8 border-2 border-green-500 border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="space-y-6 pb-4">
-      {/* Header Section */}
-      <div className="bg-gradient-to-br from-green-50 to-green-100 dark:from-gray-800 dark:to-gray-900 rounded-2xl border border-green-200 dark:border-gray-700 p-6 shadow-sm">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <div className="flex items-center gap-2 text-green-700 dark:text-green-400 mb-2">
-              <CalendarDays className="w-6 h-6" />
-              <span className="text-sm font-semibold uppercase tracking-wide">Attendance Tracker</span>
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-emerald-950 -m-6 p-6 pb-24">
+      {/* Header */}
+      <div className="rounded-2xl backdrop-blur-2xl bg-white/[0.03] border border-white/10 p-5 mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-green-500/10 border border-green-500/20">
+              <CalendarDays className="w-6 h-6 text-green-400" />
             </div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{formatDisplayDate(today)}</h1>
+            <div>
+              <p className="text-xs font-semibold text-green-400 uppercase tracking-wider">Mark Attendance</p>
+              <h1 className="text-lg font-bold text-white">{formatDisplayDate(today)}</h1>
+            </div>
           </div>
-          <div className="flex items-center gap-2 bg-white dark:bg-gray-800 px-4 py-2 rounded-xl border border-gray-200 dark:border-gray-700">
-            <Clock className="w-5 h-5 text-gray-500" />
-            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+          <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/[0.05] border border-white/10">
+            <Clock className="w-4 h-4 text-gray-400" />
+            <span className="text-sm text-gray-300">
               {new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
             </span>
           </div>
         </div>
+      </div>
 
-        {/* Statistics Grid */}
-        <div className="grid grid-cols-3 gap-3">
-          <div className="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700">
-            <div className="flex items-center gap-2 mb-1">
-              <Users className="w-4 h-4 text-gray-500" />
-              <span className="text-xs text-gray-600 dark:text-gray-400 font-medium">Total</span>
-            </div>
-            <p className="text-2xl font-bold text-gray-900 dark:text-white">{players.length}</p>
+      {/* Stats Row */}
+      <div className="grid grid-cols-3 gap-3 mb-6">
+        <div className="rounded-2xl backdrop-blur-2xl bg-white/[0.03] border border-white/10 p-4 text-center">
+          <div className="flex items-center justify-center w-8 h-8 mx-auto mb-2 rounded-lg bg-blue-500/10 border border-blue-500/20">
+            <Users className="w-4 h-4 text-blue-400" />
           </div>
-          <div className="bg-green-50 dark:bg-green-900/20 rounded-xl p-4 border border-green-200 dark:border-green-700">
-            <div className="flex items-center gap-2 mb-1">
-              <CheckCircle className="w-4 h-4 text-green-600 dark:text-green-400" />
-              <span className="text-xs text-green-700 dark:text-green-400 font-medium">Present</span>
-            </div>
-            <p className="text-2xl font-bold text-green-700 dark:text-green-400">{presentCount}</p>
+          <p className="text-2xl font-bold text-white">{players.length}</p>
+          <p className="text-[10px] text-gray-400 font-medium uppercase tracking-wider mt-0.5">Total</p>
+        </div>
+        <div className="rounded-2xl backdrop-blur-2xl bg-white/[0.03] border border-green-500/20 p-4 text-center">
+          <div className="flex items-center justify-center w-8 h-8 mx-auto mb-2 rounded-lg bg-green-500/10 border border-green-500/20">
+            <CheckCircle className="w-4 h-4 text-green-400" />
           </div>
-          <div className="bg-red-50 dark:bg-red-900/20 rounded-xl p-4 border border-red-200 dark:border-red-700">
-            <div className="flex items-center gap-2 mb-1">
-              <XCircle className="w-4 h-4 text-red-600 dark:text-red-400" />
-              <span className="text-xs text-red-700 dark:text-red-400 font-medium">Absent</span>
-            </div>
-            <p className="text-2xl font-bold text-red-700 dark:text-red-400">{absentCount}</p>
+          <p className="text-2xl font-bold text-green-400">{presentCount}</p>
+          <p className="text-[10px] text-gray-400 font-medium uppercase tracking-wider mt-0.5">Present</p>
+        </div>
+        <div className="rounded-2xl backdrop-blur-2xl bg-white/[0.03] border border-red-500/20 p-4 text-center">
+          <div className="flex items-center justify-center w-8 h-8 mx-auto mb-2 rounded-lg bg-red-500/10 border border-red-500/20">
+            <XCircle className="w-4 h-4 text-red-400" />
           </div>
+          <p className="text-2xl font-bold text-red-400">{absentCount}</p>
+          <p className="text-[10px] text-gray-400 font-medium uppercase tracking-wider mt-0.5">Absent</p>
         </div>
       </div>
 
+      {/* Attendance Rate Bar */}
+      {players.length > 0 && (
+        <div className="rounded-2xl backdrop-blur-2xl bg-white/[0.03] border border-white/10 p-4 mb-6">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs text-gray-400 font-medium">Attendance Rate</span>
+            <span className="text-sm font-bold text-green-400">{attendancePct}%</span>
+          </div>
+          <div className="h-2 bg-white/5 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-green-500 to-emerald-400 rounded-full transition-all duration-500"
+              style={{ width: `${attendancePct}%` }}
+            />
+          </div>
+        </div>
+      )}
+
       {/* Already submitted banner */}
       {alreadySubmitted && (
-        <div className={`p-4 rounded-xl border flex items-center gap-3 ${submitSuccess ? 'bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-800' : 'bg-blue-50 border-blue-200 dark:bg-blue-900/20 dark:border-blue-800'}`}>
-          <div className={`flex items-center justify-center w-10 h-10 rounded-full ${submitSuccess ? 'bg-green-100 dark:bg-green-900/40' : 'bg-blue-100 dark:bg-blue-900/40'}`}>
-            <CheckCheck className={`w-6 h-6 ${submitSuccess ? 'text-green-600 dark:text-green-400' : 'text-blue-600 dark:text-blue-400'}`} />
+        <div className={`rounded-2xl p-4 mb-6 flex items-center gap-3 border ${
+          submitSuccess
+            ? 'bg-green-500/10 border-green-500/20'
+            : 'bg-blue-500/10 border-blue-500/20'
+        }`}>
+          <div className={`flex items-center justify-center w-10 h-10 rounded-full ${
+            submitSuccess ? 'bg-green-500/20' : 'bg-blue-500/20'
+          }`}>
+            <CheckCheck className={`w-5 h-5 ${submitSuccess ? 'text-green-400' : 'text-blue-400'}`} />
           </div>
           <div>
-            <p className={`font-semibold ${submitSuccess ? 'text-green-700 dark:text-green-400' : 'text-blue-700 dark:text-blue-400'}`}>
-              {submitSuccess ? 'Attendance Submitted Successfully!' : 'Attendance Already Marked'}
+            <p className={`font-semibold text-sm ${submitSuccess ? 'text-green-300' : 'text-blue-300'}`}>
+              {submitSuccess ? 'Attendance Submitted!' : 'Already Marked'}
             </p>
-            <p className={`text-sm ${submitSuccess ? 'text-green-600 dark:text-green-500' : 'text-blue-600 dark:text-blue-500'}`}>
-              {submitSuccess ? 'All attendance records have been saved.' : 'Today\'s attendance has already been submitted.'}
+            <p className={`text-xs ${submitSuccess ? 'text-green-400/70' : 'text-blue-400/70'}`}>
+              {submitSuccess ? 'All records saved successfully.' : "Today's attendance was already submitted."}
             </p>
           </div>
         </div>
@@ -236,32 +251,29 @@ export default function CoachAttendancePage() {
 
       {/* Action Bar */}
       {!alreadySubmitted && players.length > 0 && (
-        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
+        <div className="rounded-2xl backdrop-blur-2xl bg-white/[0.03] border border-white/10 p-4 mb-4">
           <div className="flex flex-col sm:flex-row gap-3">
-            {/* Search */}
             <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
               <input
                 type="text"
                 placeholder="Search players..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-green-500"
+                className="w-full pl-9 pr-4 py-2.5 bg-white/[0.05] border border-white/10 rounded-xl text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-green-500/50"
               />
             </div>
-
-            {/* Quick Actions */}
             <div className="flex gap-2">
               <button
                 onClick={markAllPresent}
-                className="flex items-center gap-2 px-4 py-2.5 bg-green-100 hover:bg-green-200 dark:bg-green-900/30 dark:hover:bg-green-900/50 text-green-700 dark:text-green-400 font-medium rounded-lg transition-colors"
+                className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-green-500/10 border border-green-500/20 text-green-400 text-sm font-medium hover:bg-green-500/20 transition-colors"
               >
                 <CheckCheck className="w-4 h-4" />
                 <span className="hidden sm:inline">All Present</span>
               </button>
               <button
                 onClick={markAllAbsent}
-                className="flex items-center gap-2 px-4 py-2.5 bg-red-100 hover:bg-red-200 dark:bg-red-900/30 dark:hover:bg-red-900/50 text-red-700 dark:text-red-400 font-medium rounded-lg transition-colors"
+                className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm font-medium hover:bg-red-500/20 transition-colors"
               >
                 <X className="w-4 h-4" />
                 <span className="hidden sm:inline">All Absent</span>
@@ -271,34 +283,30 @@ export default function CoachAttendancePage() {
         </div>
       )}
 
-      {/* Player Attendance List */}
+      {/* Player List */}
       {players.length === 0 ? (
-        <div className="flex flex-col items-center justify-center p-12 text-center bg-white dark:bg-gray-800 rounded-xl border border-dashed border-gray-300 dark:border-gray-700">
-          <div className="w-16 h-16 bg-gray-100 dark:bg-gray-700 rounded-full flex items-center justify-center mb-4">
-            <Users className="w-8 h-8 text-gray-400" />
+        <div className="rounded-2xl backdrop-blur-2xl bg-white/[0.03] border border-white/10 p-12 text-center">
+          <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center mx-auto mb-4">
+            <Users className="w-8 h-8 text-gray-500" />
           </div>
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">No Active Players</h3>
-          <p className="text-gray-500 dark:text-gray-400 text-sm">There are no active players in your branch yet.</p>
+          <p className="text-white font-medium mb-1">No Active Players</p>
+          <p className="text-sm text-gray-400">There are no active players in your branch yet.</p>
         </div>
       ) : filteredPlayers.length === 0 ? (
-        <div className="flex flex-col items-center justify-center p-12 text-center bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
-          <Search className="w-12 h-12 text-gray-400 mb-3" />
-          <p className="text-gray-600 dark:text-gray-400 font-medium">No players found matching "{searchQuery}"</p>
+        <div className="rounded-2xl backdrop-blur-2xl bg-white/[0.03] border border-white/10 p-12 text-center">
+          <Search className="w-10 h-10 text-gray-500 mx-auto mb-3" />
+          <p className="text-gray-300 font-medium">No players found matching &ldquo;{searchQuery}&rdquo;</p>
         </div>
       ) : (
-        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+        <div className="rounded-2xl backdrop-blur-2xl bg-white/[0.03] border border-white/10 overflow-hidden">
           {/* Table Header */}
-          <div className="grid grid-cols-[1fr_auto] gap-4 px-6 py-4 bg-gray-50 dark:bg-gray-900/50 border-b border-gray-200 dark:border-gray-700">
-            <div className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
-              Player Name
-            </div>
-            <div className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider text-center">
-              Status
-            </div>
+          <div className="grid grid-cols-[1fr_auto] gap-4 px-5 py-3 border-b border-white/10 bg-white/[0.02]">
+            <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Player</span>
+            <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Status</span>
           </div>
 
           {/* Player Rows */}
-          <div className="divide-y divide-gray-200 dark:divide-gray-700">
+          <div className="divide-y divide-white/5">
             {filteredPlayers.map((player, index) => {
               const isPresent = attendance[player.id] === 'present';
               return (
@@ -306,36 +314,52 @@ export default function CoachAttendancePage() {
                   key={player.id}
                   onClick={() => toggle(player.id)}
                   disabled={alreadySubmitted}
-                  className={`w-full grid grid-cols-[1fr_auto] gap-4 px-6 py-4 text-left transition-all ${
+                  className={`w-full grid grid-cols-[1fr_auto] gap-4 px-5 py-4 text-left transition-all ${
                     alreadySubmitted
                       ? 'cursor-default'
-                      : 'cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-900/30 active:bg-gray-100 dark:active:bg-gray-900/50'
+                      : 'cursor-pointer hover:bg-white/[0.03] active:bg-white/[0.05]'
                   }`}
                 >
                   <div className="flex items-center gap-3">
-                    <div className={`flex items-center justify-center w-10 h-10 rounded-full font-semibold text-white text-sm ${
-                      isPresent ? 'bg-green-500' : 'bg-gray-400'
+                    <div className={`flex items-center justify-center w-10 h-10 rounded-full text-sm font-semibold transition-colors ${
+                      isPresent
+                        ? 'bg-green-500/20 border border-green-500/30 text-green-400'
+                        : 'bg-red-500/20 border border-red-500/30 text-red-400'
                     }`}>
                       {player.full_name.charAt(0).toUpperCase()}
                     </div>
                     <div>
-                      <p className="font-medium text-gray-900 dark:text-white">{player.full_name}</p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">Player #{index + 1}</p>
+                      <p className="font-medium text-white text-sm">{player.full_name}</p>
+                      <p className="text-[11px] text-gray-500">#{index + 1}</p>
                     </div>
                   </div>
 
                   <div className="flex items-center">
-                    {isPresent ? (
-                      <div className="flex items-center gap-2 px-4 py-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
-                        <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
-                        <span className="text-sm font-semibold text-green-700 dark:text-green-400">Present</span>
+                    {/* iOS-style toggle pill */}
+                    <div className={`relative flex items-center w-24 h-9 rounded-full transition-colors ${
+                      isPresent
+                        ? 'bg-green-500/20 border border-green-500/30'
+                        : 'bg-red-500/20 border border-red-500/30'
+                    }`}>
+                      <div className={`absolute flex items-center justify-center w-[42px] h-7 rounded-full transition-all duration-300 ${
+                        isPresent
+                          ? 'left-1 bg-green-500 shadow-lg shadow-green-500/30'
+                          : 'left-[calc(100%-46px)] bg-red-500 shadow-lg shadow-red-500/30'
+                      }`}>
+                        {isPresent ? (
+                          <CheckCircle className="w-4 h-4 text-white" />
+                        ) : (
+                          <XCircle className="w-4 h-4 text-white" />
+                        )}
                       </div>
-                    ) : (
-                      <div className="flex items-center gap-2 px-4 py-2 bg-red-100 dark:bg-red-900/30 rounded-lg">
-                        <XCircle className="w-5 h-5 text-red-600 dark:text-red-400" />
-                        <span className="text-sm font-semibold text-red-700 dark:text-red-400">Absent</span>
-                      </div>
-                    )}
+                      <span className={`absolute text-[10px] font-bold uppercase tracking-wide transition-opacity ${
+                        isPresent
+                          ? 'right-3 text-green-400'
+                          : 'left-3 text-red-400'
+                      }`}>
+                        {isPresent ? 'P' : 'A'}
+                      </span>
+                    </div>
                   </div>
                 </button>
               );
@@ -344,16 +368,18 @@ export default function CoachAttendancePage() {
         </div>
       )}
 
-      {/* Submit Button */}
+      {/* Fixed Submit Button */}
       {!alreadySubmitted && players.length > 0 && (
-        <button
-          onClick={handleSubmit}
-          disabled={isSubmitting}
-          className="w-full flex items-center justify-center gap-3 py-4 px-6 bg-green-600 hover:bg-green-700 disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold rounded-xl text-base transition-colors shadow-lg shadow-green-600/20"
-        >
-          <Send className="w-5 h-5" />
-          {isSubmitting ? 'Submitting Attendance...' : 'Submit Attendance'}
-        </button>
+        <div className="fixed bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-slate-950 via-slate-950/95 to-transparent sm:relative sm:p-0 sm:mt-6 sm:bg-none">
+          <button
+            onClick={handleSubmit}
+            disabled={isSubmitting}
+            className="w-full flex items-center justify-center gap-3 py-4 px-6 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold rounded-2xl text-base transition-all shadow-xl shadow-green-500/20 hover:shadow-green-500/30 hover:scale-[1.01] active:scale-[0.99]"
+          >
+            <Send className="w-5 h-5" />
+            {isSubmitting ? 'Submitting...' : 'Submit Attendance'}
+          </button>
+        </div>
       )}
     </div>
   );

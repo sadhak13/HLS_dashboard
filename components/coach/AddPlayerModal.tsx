@@ -33,6 +33,7 @@ export function AddPlayerModal({ isOpen, onClose, onPlayerCreated, branchId: pro
   const [parentName, setParentName] = useState('')
   const [parentPhone, setParentPhone] = useState('')
   const [enrolledDate, setEnrolledDate] = useState('')
+  const [aadharNumber, setAadharNumber] = useState('')
 
   // Get branch info on open
   useEffect(() => {
@@ -80,6 +81,7 @@ export function AddPlayerModal({ isOpen, onClose, onPlayerCreated, branchId: pro
       setParentName('')
       setParentPhone('')
       setEnrolledDate(new Date().toISOString().split('T')[0])
+      setAadharNumber('')
       setError('')
     }
   }, [isOpen, profile, propBranchId]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -118,6 +120,7 @@ export function AddPlayerModal({ isOpen, onClose, onPlayerCreated, branchId: pro
     formData.append('parentPhone', parentPhone)
     formData.append('branchId', branchId)
     formData.append('enrolledDate', enrolledDate)
+    formData.append('aadharNumber', aadharNumber)
 
     const result = await createCoachPlayer(formData)
 
@@ -210,6 +213,23 @@ export function AddPlayerModal({ isOpen, onClose, onPlayerCreated, branchId: pro
             onChange={(e) => setParentPhone(e.target.value)}
             required
           />
+        </div>
+
+        <div>
+          <Input
+            type="text"
+            label="Aadhar Number (Optional)"
+            placeholder="e.g. 1234 5678 9012"
+            value={aadharNumber}
+            onChange={(e) => {
+              const val = e.target.value.replace(/\D/g, '').slice(0, 12)
+              setAadharNumber(val)
+            }}
+            maxLength={12}
+          />
+          {aadharNumber && aadharNumber.length !== 12 && (
+            <p className="text-xs text-amber-500 mt-1">Aadhar must be 12 digits</p>
+          )}
         </div>
 
         <div>

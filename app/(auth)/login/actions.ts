@@ -7,7 +7,7 @@ import { createClient } from '@/lib/supabase/server'
 export async function login(prevState: any, formData: FormData) {
   const email = formData.get('email') as string
   const password = formData.get('password') as string
-  
+
   if (!email || !password) {
     return { error: 'Email and password are required' }
   }
@@ -33,14 +33,15 @@ export async function login(prevState: any, formData: FormData) {
   const requiresPasswordChange = data.user.user_metadata?.must_change_password === true
 
   revalidatePath('/', 'layout')
-  
+
+  let redirectTo = '/dashboard'
   if (profile?.role === 'COACH' && requiresPasswordChange) {
-    redirect('/change-password')
+    redirectTo = '/change-password'
   } else if (profile?.role === 'COACH') {
-    redirect('/coach-dashboard')
-  } else {
-    redirect('/dashboard')
+    redirectTo = '/coach-dashboard'
   }
+
+  return { redirectTo }
 }
 
 export async function logout() {

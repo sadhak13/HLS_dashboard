@@ -15,6 +15,7 @@ export async function createAdminPlayer(formData: FormData) {
   const branchId = formData.get('branchId') as string
   const status = formData.get('status') as string || 'active'
   const enrolledDate = formData.get('enrolledDate') as string || new Date().toISOString().split('T')[0]
+  const aadharNumber = formData.get('aadharNumber') as string
 
   const cleanFullName = fullName?.trim().replace(/\s+/g, ' ')
   const cleanParentPhone = parentPhone?.trim()
@@ -40,17 +41,22 @@ export async function createAdminPlayer(formData: FormData) {
     }
 
     // Create player
+    const insertData: any = {
+      branch_id: branchId,
+      full_name: cleanFullName,
+      date_of_birth: dob,
+      parent_name: parentName?.trim(),
+      parent_phone: cleanParentPhone,
+      enrolled_date: enrolledDate,
+      status: status,
+    }
+    if (aadharNumber && aadharNumber.length === 12) {
+      insertData.aadhar_number = aadharNumber
+    }
+
     const { data: newPlayer, error: insertError } = await (supabase as any)
       .from('players')
-      .insert({
-        branch_id: branchId,
-        full_name: cleanFullName,
-        date_of_birth: dob,
-        parent_name: parentName?.trim(),
-        parent_phone: cleanParentPhone,
-        enrolled_date: enrolledDate,
-        status: status,
-      })
+      .insert(insertData)
       .select()
       .single()
 
@@ -86,6 +92,7 @@ export async function updateAdminPlayer(playerId: string, formData: FormData) {
   const parentPhone = formData.get('parentPhone') as string
   const branchId = formData.get('branchId') as string
   const status = formData.get('status') as string
+  const aadharNumber = formData.get('aadharNumber') as string
 
   const cleanFullName = fullName?.trim().replace(/\s+/g, ' ')
   const cleanParentPhone = parentPhone?.trim()
@@ -110,16 +117,19 @@ export async function updateAdminPlayer(playerId: string, formData: FormData) {
       return { error: `Another player "${cleanFullName}" with phone "${cleanParentPhone}" already exists in the system` }
     }
 
+    const updateData: any = {
+      branch_id: branchId,
+      full_name: cleanFullName,
+      date_of_birth: dob,
+      parent_name: parentName?.trim(),
+      parent_phone: cleanParentPhone,
+      status: status,
+      aadhar_number: (aadharNumber && aadharNumber.length === 12) ? aadharNumber : null,
+    }
+
     const { error: updateError } = await (supabase as any)
       .from('players')
-      .update({
-        branch_id: branchId,
-        full_name: cleanFullName,
-        date_of_birth: dob,
-        parent_name: parentName?.trim(),
-        parent_phone: cleanParentPhone,
-        status: status,
-      })
+      .update(updateData)
       .eq('id', playerId)
 
     if (updateError) throw updateError

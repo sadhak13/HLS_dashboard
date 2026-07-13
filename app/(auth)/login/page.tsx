@@ -1,11 +1,17 @@
 "use client";
 
 import Image from 'next/image';
-import { useActionState } from 'react';
+import { useActionState, useEffect } from 'react';
 import { login } from './actions';
 
 export default function LoginPage() {
   const [state, formAction, isPending] = useActionState(login, null);
+
+  useEffect(() => {
+    if (state?.redirectTo) {
+      window.location.href = state.redirectTo;
+    }
+  }, [state]);
 
   return (
     <div className="relative flex min-h-screen overflow-hidden bg-gradient-to-br from-slate-950 via-slate-900 to-emerald-950">
@@ -50,6 +56,7 @@ export default function LoginPage() {
               src="/login_page.png"
               alt="Soccer Player"
               fill
+              sizes="50vw"
               className="object-cover object-center"
               priority
             />

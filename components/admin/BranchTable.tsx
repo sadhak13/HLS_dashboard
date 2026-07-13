@@ -58,7 +58,7 @@ export function BranchTable({ branches, isLoading }: BranchTableProps) {
                   </div>
                   <div>
                     <div className="font-medium text-gray-900 dark:text-white">{branch.name}</div>
-                    <div className="text-xs text-gray-500">{branch.id.substring(0, 8)}...</div>
+                    <div className="text-xs text-gray-500">{branch.location}</div>
                   </div>
                 </div>
               </TableCell>

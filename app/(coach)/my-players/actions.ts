@@ -15,6 +15,7 @@ export async function createCoachPlayer(formData: FormData) {
   const parentPhone = formData.get('parentPhone') as string
   const branchId = formData.get('branchId') as string
   const enrolledDate = formData.get('enrolledDate') as string
+  const aadharNumber = formData.get('aadharNumber') as string
 
   // Normalize: trim + collapse internal spaces to prevent whitespace-based duplicate bypass
   const cleanFullName = fullName?.trim().replace(/\s+/g, ' ')
@@ -44,17 +45,22 @@ export async function createCoachPlayer(formData: FormData) {
     }
 
     // Create player
+    const insertData: any = {
+      branch_id: branchId,
+      full_name: cleanFullName,
+      date_of_birth: dob,
+      parent_name: parentName.trim(),
+      parent_phone: cleanParentPhone,
+      enrolled_date: enrolledDate,
+      status: 'active',
+    }
+    if (aadharNumber && aadharNumber.length === 12) {
+      insertData.aadhar_number = aadharNumber
+    }
+
     const { data: newPlayer, error: insertError } = await (supabase as any)
       .from('players')
-      .insert({
-        branch_id: branchId,
-        full_name: cleanFullName,
-        date_of_birth: dob,
-        parent_name: parentName.trim(),
-        parent_phone: cleanParentPhone,
-        enrolled_date: enrolledDate,
-        status: 'active',
-      })
+      .insert(insertData)
       .select()
       .single()
 

@@ -31,6 +31,7 @@ export function AddPlayerModal({ isOpen, onClose, onSuccess, editingPlayer }: Ad
   const [branchId, setBranchId] = useState('');
   const [status, setStatus] = useState<'active' | 'inactive' | 'dropped'>('active');
   const [enrolledDate, setEnrolledDate] = useState(new Date().toISOString().split('T')[0]);
+  const [aadharNumber, setAadharNumber] = useState('');
 
   const supabase = createClient();
   const isEditing = !!editingPlayer;
@@ -53,6 +54,7 @@ export function AddPlayerModal({ isOpen, onClose, onSuccess, editingPlayer }: Ad
         setBranchId(editingPlayer.branch_id);
         setStatus(editingPlayer.status as any);
         setEnrolledDate(editingPlayer.enrolled_date || new Date().toISOString().split('T')[0]);
+        setAadharNumber((editingPlayer as any).aadhar_number || '');
       } else {
         setFullName('');
         setDob('');
@@ -61,6 +63,7 @@ export function AddPlayerModal({ isOpen, onClose, onSuccess, editingPlayer }: Ad
         setBranchId('');
         setStatus('active');
         setEnrolledDate(new Date().toISOString().split('T')[0]);
+        setAadharNumber('');
       }
       setError('');
     }
@@ -79,6 +82,7 @@ export function AddPlayerModal({ isOpen, onClose, onSuccess, editingPlayer }: Ad
     formData.append('branchId', branchId);
     formData.append('status', status);
     formData.append('enrolledDate', enrolledDate);
+    formData.append('aadharNumber', aadharNumber);
 
     try {
       if (isEditing && editingPlayer) {
@@ -177,6 +181,23 @@ export function AddPlayerModal({ isOpen, onClose, onSuccess, editingPlayer }: Ad
               onChange={(e) => setParentPhone(e.target.value)}
               required
             />
+          </div>
+
+          <div>
+            <Input
+              type="text"
+              label="Aadhar Number (Optional)"
+              placeholder="e.g. 1234 5678 9012"
+              value={aadharNumber}
+              onChange={(e) => {
+                const val = e.target.value.replace(/\D/g, '').slice(0, 12);
+                setAadharNumber(val);
+              }}
+              maxLength={12}
+            />
+            {aadharNumber && aadharNumber.length !== 12 && (
+              <p className="text-xs text-amber-500 mt-1">Aadhar must be 12 digits</p>
+            )}
           </div>
 
           <div>
