@@ -29,7 +29,7 @@ export default function AdminAttendancePage() {
       if (data) setBranches(data);
     };
     fetchBranches();
-  }, [supabase]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchAttendance = useCallback(async () => {
     setIsLoading(true);
@@ -46,7 +46,7 @@ export default function AdminAttendancePage() {
     const { data } = await query;
     setRecords((data as AttendanceRecord[]) ?? []);
     setIsLoading(false);
-  }, [supabase, selectedDate, selectedBranch]);
+  }, [selectedDate, selectedBranch]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     fetchAttendance();

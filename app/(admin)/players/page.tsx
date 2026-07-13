@@ -54,7 +54,7 @@ export default function PlayersPage() {
       setPlayers(data as Player[]);
     }
     setIsLoading(false);
-  }, [supabase]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     fetchPlayers();

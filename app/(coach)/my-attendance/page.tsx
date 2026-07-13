@@ -104,7 +104,7 @@ export default function CoachAttendancePage() {
     }
 
     setIsLoading(false);
-  }, [profile, supabase, today]);
+  }, [profile, today]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     fetchData();

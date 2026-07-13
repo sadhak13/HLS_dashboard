@@ -138,7 +138,7 @@ export function DashboardClient({
       supabase.removeChannel(feesSub);
       supabase.removeChannel(branchesSub);
     };
-  }, [supabase, branchesMap]);
+  }, [branchesMap]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="space-y-8">

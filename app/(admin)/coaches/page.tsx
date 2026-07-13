@@ -31,7 +31,7 @@ export default function CoachesPage() {
       setCoaches(data);
     }
     setIsLoading(false);
-  }, [supabase]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     fetchCoaches();

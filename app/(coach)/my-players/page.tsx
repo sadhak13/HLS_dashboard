@@ -78,7 +78,7 @@ export default function MyPlayersPage() {
 
     setPlayers((data as PlayerRecord[]) ?? [])
     setIsLoading(false)
-  }, [profile, supabase])
+  }, [profile]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     fetchPlayers()

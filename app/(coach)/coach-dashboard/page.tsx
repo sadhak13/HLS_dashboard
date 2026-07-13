@@ -70,7 +70,7 @@ export default function CoachDashboardPage() {
       absentCount,
     });
     setIsLoading(false);
-  }, [profile, supabase, today]);
+  }, [profile, today]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     fetchSummary();

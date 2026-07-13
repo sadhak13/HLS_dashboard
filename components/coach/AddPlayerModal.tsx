@@ -82,7 +82,7 @@ export function AddPlayerModal({ isOpen, onClose, onPlayerCreated, branchId: pro
       setEnrolledDate(new Date().toISOString().split('T')[0])
       setError('')
     }
-  }, [isOpen, profile, propBranchId, supabase])
+  }, [isOpen, profile, propBranchId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()

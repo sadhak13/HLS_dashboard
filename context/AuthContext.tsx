@@ -54,13 +54,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     );
 
-    // Then get the initial session — if there's already a session, onAuthStateChange
-    // will also fire with INITIAL_SESSION, so we don't double-set state here.
-    // We only need this to handle the case where no event fires at all (no session).
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      // If onAuthStateChange already fired (isLoading already false), skip.
-      // Otherwise set everything from the initial session check.
-      if (mounted && session === null) {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (!mounted) return;
+      if (session?.user) {
+        setUser(session.user);
+        const profileData = await fetchProfileForUser(session.user.id);
+        if (mounted) {
+          setProfile(profileData);
+          setIsLoading(false);
+        }
+      } else {
         setUser(null);
         setProfile(null);
         setIsLoading(false);
@@ -71,7 +74,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       mounted = false;
       subscription.unsubscribe();
     };
-  }, [supabase]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <AuthContext.Provider value={{ user, profile, isLoading }}>

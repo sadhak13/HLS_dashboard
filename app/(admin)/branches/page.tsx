@@ -29,7 +29,7 @@ export default function BranchesPage() {
       setBranches(data);
     }
     setIsLoading(false);
-  }, [supabase]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     fetchBranches();

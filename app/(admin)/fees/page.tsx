@@ -62,7 +62,7 @@ export default function FeesPage() {
       setFees(data as FeeRecord[]);
     }
     setIsLoading(false);
-  }, [supabase, selectedMonthStr]);
+  }, [selectedMonthStr]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     fetchFees();
