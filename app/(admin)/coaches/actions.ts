@@ -12,8 +12,8 @@ export async function createCoachAccount(formData: FormData) {
   const fullName = formData.get('fullName') as string
   const branchId = formData.get('branchId') as string
   const phone = formData.get('phone') as string
-  
-  // Hardcoded default password for internal tools
+  const batchIdsJson = formData.get('batchIds') as string
+
   const password = 'Welcome123!'
 
   const adminClient = createAdminClient()
@@ -45,21 +45,37 @@ export async function createCoachAccount(formData: FormData) {
     .insert(profilePayload as any)
 
   if (profileError) {
-    // Rollback user creation if profile fails
     await adminClient.auth.admin.deleteUser(userId)
     return { error: profileError.message }
   }
 
-  // 3. Create the coach record
+  // 3. Create the coach record (keeps branch_id for backwards compat)
   const coachPayload: CoachInsert = { user_id: userId, branch_id: branchId, phone: phone || null }
-  const { error: coachError } = await adminClient
+  const { data: coachData, error: coachError } = await adminClient
     .from('coaches')
     .insert(coachPayload as any)
+    .select('id')
+    .single()
 
   if (coachError) {
-    // Rollback if coach record fails
     await adminClient.auth.admin.deleteUser(userId)
     return { error: coachError.message }
+  }
+
+  // 4. Create coach_batches junction records
+  if (batchIdsJson) {
+    try {
+      const batchIds: string[] = JSON.parse(batchIdsJson)
+      if (batchIds.length > 0) {
+        const junctionRecords = batchIds.map(batchId => ({
+          coach_id: (coachData as any).id,
+          batch_id: batchId,
+        }))
+        await (adminClient as any).from('coach_batches').insert(junctionRecords)
+      }
+    } catch {
+      // Non-critical: coach is created, batch assignments can be added later
+    }
   }
 
   revalidatePath('/coaches')

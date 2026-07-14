@@ -3,8 +3,7 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import { useAuth } from '@/context/AuthContext'
 import { createClient } from '@/lib/supabase/client'
-import { Users, Phone, Plus, Trash2 } from 'lucide-react'
-import { Button } from '@/components/ui/Button'
+import { Users, Phone, Plus, Trash2, Search, UserCircle } from 'lucide-react'
 import { AddPlayerModal } from '@/components/coach/AddPlayerModal'
 import { AddFeesForNewPlayerModal } from '@/components/coach/AddFeesForNewPlayerModal'
 import { DeletePlayerModal } from '@/components/coach/DeletePlayerModal'
@@ -27,6 +26,7 @@ export default function MyPlayersPage() {
   const [players, setPlayers] = useState<PlayerRecord[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [branchId, setBranchId] = useState('')
+  const [searchQuery, setSearchQuery] = useState('')
 
   // Modal states
   const [showAddPlayerModal, setShowAddPlayerModal] = useState(false)
@@ -48,13 +48,11 @@ export default function MyPlayersPage() {
     if (!profile) return
     setIsLoading(true)
 
-    // Try using the RPC function first
     const { data: rpcBranchId, error: rpcError } = await supabase.rpc('get_coach_branch_id')
 
     let resolvedBranchId: any = rpcBranchId
-    
+
     if (rpcError || !resolvedBranchId) {
-      console.warn('RPC failed or returned null, falling back to direct table query...', rpcError)
       const { data: coachData } = await (supabase as any)
         .from('coaches')
         .select('branch_id')
@@ -115,104 +113,197 @@ export default function MyPlayersPage() {
   const inactivePlayersCount = players.filter((p) => p.status === 'inactive').length
   const droppedPlayersCount = players.filter((p) => p.status === 'dropped').length
 
-  const totalPages = Math.ceil(players.length / ITEMS_PER_PAGE)
-  const paginatedPlayers = players.slice(
+  const filteredPlayers = players.filter(p =>
+    p.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    p.parent_name.toLowerCase().includes(searchQuery.toLowerCase())
+  )
+
+  const totalPages = Math.ceil(filteredPlayers.length / ITEMS_PER_PAGE)
+  const paginatedPlayers = filteredPlayers.slice(
     (currentPage - 1) * ITEMS_PER_PAGE,
     currentPage * ITEMS_PER_PAGE
   )
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-start justify-between">
+    <div className="w-full space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <p className="text-sm font-medium text-green-600">Your branch players</p>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Player list</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400">
-            Keep track of the players assigned to your branch.
+          <h1 className="text-2xl font-bold text-white">Player Directory</h1>
+          <p className="text-sm text-gray-400 mt-1">
+            {players.length} {players.length === 1 ? 'player' : 'players'} in your branch
           </p>
         </div>
-        <Button onClick={() => setShowAddPlayerModal(true)} className="gap-2">
-          <Plus className="h-4 w-4" />
+        <button
+          onClick={() => setShowAddPlayerModal(true)}
+          className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-white bg-green-600 hover:bg-green-500 shadow-lg shadow-green-500/25 border border-green-500/30 transition-all duration-200 active:scale-95 w-full sm:w-auto"
+        >
+          <Plus className="w-4 h-4" />
           Add Player
-        </Button>
+        </button>
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-3">
-        <div className="rounded-lg bg-green-50 dark:bg-green-900/20 p-4 border border-green-200 dark:border-green-800">
-          <p className="text-xs font-medium text-green-600 dark:text-green-400">Active</p>
-          <p className="text-2xl font-bold text-green-700 dark:text-green-300">{activePlayersCount}</p>
+      <div className="grid grid-cols-3 gap-2 sm:gap-3">
+        <div className="rounded-2xl bg-white/[0.03] border border-white/10 p-3 sm:p-4 flex flex-col items-center text-center sm:flex-row sm:text-left gap-2 sm:gap-3">
+          <div className="flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-green-500/10 border border-green-500/20 shrink-0">
+            <Users className="w-4 h-4 sm:w-5 sm:h-5 text-green-400" />
+          </div>
+          <div>
+            <p className="text-[10px] sm:text-xs text-gray-500 font-medium uppercase tracking-wider">Active</p>
+            <p className="text-xl sm:text-2xl font-bold text-white">{activePlayersCount}</p>
+          </div>
         </div>
-        <div className="rounded-lg bg-yellow-50 dark:bg-yellow-900/20 p-4 border border-yellow-200 dark:border-yellow-800">
-          <p className="text-xs font-medium text-yellow-600 dark:text-yellow-400">Inactive</p>
-          <p className="text-2xl font-bold text-yellow-700 dark:text-yellow-300">{inactivePlayersCount}</p>
+        <div className="rounded-2xl bg-white/[0.03] border border-white/10 p-3 sm:p-4 flex flex-col items-center text-center sm:flex-row sm:text-left gap-2 sm:gap-3">
+          <div className="flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 shrink-0">
+            <Users className="w-4 h-4 sm:w-5 sm:h-5 text-amber-400" />
+          </div>
+          <div>
+            <p className="text-[10px] sm:text-xs text-gray-500 font-medium uppercase tracking-wider">Inactive</p>
+            <p className="text-xl sm:text-2xl font-bold text-white">{inactivePlayersCount}</p>
+          </div>
         </div>
-        <div className="rounded-lg bg-red-50 dark:bg-red-900/20 p-4 border border-red-200 dark:border-red-800">
-          <p className="text-xs font-medium text-red-600 dark:text-red-400">Dropped</p>
-          <p className="text-2xl font-bold text-red-700 dark:text-red-300">{droppedPlayersCount}</p>
+        <div className="rounded-2xl bg-white/[0.03] border border-white/10 p-3 sm:p-4 flex flex-col items-center text-center sm:flex-row sm:text-left gap-2 sm:gap-3">
+          <div className="flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-red-500/10 border border-red-500/20 shrink-0">
+            <Users className="w-4 h-4 sm:w-5 sm:h-5 text-red-400" />
+          </div>
+          <div>
+            <p className="text-[10px] sm:text-xs text-gray-500 font-medium uppercase tracking-wider">Dropped</p>
+            <p className="text-xl sm:text-2xl font-bold text-white">{droppedPlayersCount}</p>
+          </div>
         </div>
       </div>
 
-      {isLoading ? (
-        <div className="flex items-center justify-center rounded-xl border border-dashed border-gray-300 bg-white p-10 dark:border-gray-700 dark:bg-gray-800">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-green-600 border-t-transparent" />
+      {/* Search */}
+      {players.length > 0 && (
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+          <input
+            type="text"
+            placeholder="Search by name or parent..."
+            value={searchQuery}
+            onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
+            className="w-full pl-9 pr-4 py-2.5 bg-white/[0.05] border border-white/10 rounded-xl text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-green-500/50"
+          />
         </div>
-      ) : players.length === 0 ? (
-        <div className="text-center p-10 rounded-lg border border-dashed border-gray-300 dark:border-gray-700">
-          <Users className="h-12 w-12 text-gray-400 mx-auto mb-3" />
-          <p className="text-gray-600 dark:text-gray-400 mb-3">No players yet. Add your first player to get started.</p>
-          <Button onClick={() => setShowAddPlayerModal(true)}>Add Player</Button>
+      )}
+
+      {/* Loading */}
+      {isLoading && (
+        <div className="flex items-center justify-center py-20">
+          <div className="w-8 h-8 border-2 border-green-500 border-t-transparent rounded-full animate-spin" />
         </div>
-      ) : (
-        <div className="space-y-3">
-          {paginatedPlayers.map((player) => (
-            <div
-              key={player.id}
-              className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <Users className="h-4 w-4 text-green-600" />
-                    <h3 className="font-semibold text-gray-900 dark:text-white">{player.full_name}</h3>
+      )}
+
+      {/* Empty State */}
+      {!isLoading && players.length === 0 && (
+        <div className="rounded-2xl bg-white/[0.03] border border-white/10 p-12 flex flex-col items-center text-center gap-4">
+          <div className="w-16 h-16 rounded-2xl bg-green-500/10 border border-green-500/20 flex items-center justify-center">
+            <Users className="w-8 h-8 text-green-400" />
+          </div>
+          <div>
+            <p className="text-white font-semibold text-lg mb-1">No players yet</p>
+            <p className="text-sm text-gray-400">Add your first player to get started.</p>
+          </div>
+          <button
+            onClick={() => setShowAddPlayerModal(true)}
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-white bg-green-600 hover:bg-green-500 shadow-lg shadow-green-500/25 border border-green-500/30 transition-all duration-200 active:scale-95"
+          >
+            <Plus className="w-4 h-4" />
+            Add Player
+          </button>
+        </div>
+      )}
+
+      {/* Player List */}
+      {!isLoading && players.length > 0 && (
+        <div className="rounded-2xl bg-white/[0.03] border border-white/10 overflow-hidden">
+          {/* Table Header (desktop) */}
+          <div className="hidden sm:grid grid-cols-[2fr_1.5fr_1fr_auto] gap-4 px-5 py-3 border-b border-white/10 bg-white/[0.02]">
+            <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Player</span>
+            <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Parent</span>
+            <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Status</span>
+            <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider sr-only">Actions</span>
+          </div>
+
+          <div className="divide-y divide-white/5">
+            {paginatedPlayers.map((player) => (
+              <div
+                key={player.id}
+                className="grid grid-cols-1 sm:grid-cols-[2fr_1.5fr_1fr_auto] gap-2 sm:gap-4 px-5 py-4 hover:bg-white/[0.03] transition-colors"
+              >
+                {/* Player Name */}
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center justify-center w-9 h-9 rounded-full bg-green-500/10 border border-green-500/20 text-green-400 shrink-0">
+                    <UserCircle className="w-5 h-5" />
                   </div>
-                  <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Parent: {player.parent_name}</p>
+                  <div className="min-w-0">
+                    <p className="font-medium text-white text-sm truncate">{player.full_name}</p>
+                    <p className="text-[11px] text-gray-500 sm:hidden flex items-center gap-1">
+                      <Phone className="w-3 h-3" /> {player.parent_phone}
+                    </p>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
+
+                {/* Parent Info */}
+                <div className="hidden sm:flex items-center gap-2 min-w-0">
+                  <div className="min-w-0">
+                    <p className="text-sm text-gray-300 truncate">{player.parent_name}</p>
+                    <p className="text-xs text-gray-500 flex items-center gap-1">
+                      <Phone className="w-3 h-3" /> {player.parent_phone}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Status */}
+                <div className="flex items-center">
                   <span
-                    className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                    className={`inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold ${
                       player.status === 'active'
-                        ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                        ? 'bg-green-500/10 border border-green-500/20 text-green-400'
                         : player.status === 'inactive'
-                          ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
-                          : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                          ? 'bg-amber-500/10 border border-amber-500/20 text-amber-400'
+                          : 'bg-red-500/10 border border-red-500/20 text-red-400'
                     }`}
                   >
                     {player.status === 'active' ? 'Active' : player.status === 'inactive' ? 'Inactive' : 'Dropped'}
                   </span>
+                </div>
+
+                {/* Actions */}
+                <div className="flex items-center justify-end">
                   <button
                     onClick={() => handleDeleteClick(player)}
-                    className="p-2 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
+                    className="p-2 rounded-lg text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-all"
                     title="Delete player"
                   >
                     <Trash2 className="h-4 w-4" />
                   </button>
                 </div>
               </div>
-              <div className="mt-3 flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
-                <Phone className="h-4 w-4" />
-                <span>{player.parent_phone}</span>
-              </div>
+            ))}
+          </div>
+
+          {filteredPlayers.length > ITEMS_PER_PAGE && (
+            <div className="border-t border-white/10 px-4 py-3">
+              <Pagination
+                currentPage={currentPage}
+                totalPages={totalPages}
+                onPageChange={setCurrentPage}
+                totalItems={filteredPlayers.length}
+                itemsPerPage={ITEMS_PER_PAGE}
+                itemLabel="players"
+              />
             </div>
-          ))}
-          <Pagination
-            currentPage={currentPage}
-            totalPages={totalPages}
-            onPageChange={setCurrentPage}
-            totalItems={players.length}
-            itemsPerPage={ITEMS_PER_PAGE}
-            itemLabel="players"
-          />
+          )}
+        </div>
+      )}
+
+      {/* No results from search */}
+      {!isLoading && players.length > 0 && filteredPlayers.length === 0 && (
+        <div className="rounded-2xl bg-white/[0.03] border border-white/10 p-12 text-center">
+          <Search className="w-10 h-10 text-gray-500 mx-auto mb-3" />
+          <p className="text-gray-300 font-medium">No players match &ldquo;{searchQuery}&rdquo;</p>
         </div>
       )}
 

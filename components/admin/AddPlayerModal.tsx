@@ -10,10 +10,17 @@ import type { Database } from '@/types/database.types';
 
 type Player = Database['public']['Tables']['players']['Row'];
 
+interface Batch {
+  id: string;
+  branch_id: string;
+  name: string;
+  start_time: string;
+  end_time: string;
+}
+
 interface AddPlayerModalProps {
   isOpen: boolean;
   onClose: () => void;
-  // On create: passes the newly created player back for fees popup
   onSuccess: (newPlayer?: Player) => void;
   editingPlayer?: Player | null;
 }
@@ -22,6 +29,7 @@ export function AddPlayerModal({ isOpen, onClose, onSuccess, editingPlayer }: Ad
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [branches, setBranches] = useState<{ id: string; name: string }[]>([]);
+  const [batches, setBatches] = useState<Batch[]>([]);
 
   // Form state
   const [fullName, setFullName] = useState('');
@@ -29,6 +37,7 @@ export function AddPlayerModal({ isOpen, onClose, onSuccess, editingPlayer }: Ad
   const [parentName, setParentName] = useState('');
   const [parentPhone, setParentPhone] = useState('');
   const [branchId, setBranchId] = useState('');
+  const [batchId, setBatchId] = useState('');
   const [status, setStatus] = useState<'active' | 'inactive' | 'dropped'>('active');
   const [enrolledDate, setEnrolledDate] = useState(new Date().toISOString().split('T')[0]);
   const [aadharNumber, setAadharNumber] = useState('');
@@ -38,20 +47,22 @@ export function AddPlayerModal({ isOpen, onClose, onSuccess, editingPlayer }: Ad
 
   useEffect(() => {
     if (isOpen) {
-      // Fetch branches for dropdown
-      const fetchBranches = async () => {
-        const { data } = await supabase.from('branches').select('id, name').order('name');
-        if (data) setBranches(data);
-      };
-      fetchBranches();
+      const fetchData = async () => {
+        const { data: branchData } = await supabase.from('branches').select('id, name').order('name');
+        if (branchData) setBranches(branchData);
 
-      // Prefill form if editing
+        const { data: batchData } = await (supabase as any).from('batches').select('id, branch_id, name, start_time, end_time').order('start_time');
+        if (batchData) setBatches(batchData);
+      };
+      fetchData();
+
       if (editingPlayer) {
         setFullName(editingPlayer.full_name);
         setDob(editingPlayer.date_of_birth);
         setParentName(editingPlayer.parent_name);
         setParentPhone(editingPlayer.parent_phone);
         setBranchId(editingPlayer.branch_id);
+        setBatchId((editingPlayer as any).batch_id || '');
         setStatus(editingPlayer.status as any);
         setEnrolledDate(editingPlayer.enrolled_date || new Date().toISOString().split('T')[0]);
         setAadharNumber((editingPlayer as any).aadhar_number || '');
@@ -61,13 +72,21 @@ export function AddPlayerModal({ isOpen, onClose, onSuccess, editingPlayer }: Ad
         setParentName('');
         setParentPhone('');
         setBranchId('');
+        setBatchId('');
         setStatus('active');
         setEnrolledDate(new Date().toISOString().split('T')[0]);
         setAadharNumber('');
       }
       setError('');
     }
-  }, [isOpen, editingPlayer]);
+  }, [isOpen, editingPlayer]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const filteredBatches = batches.filter(b => b.branch_id === branchId);
+
+  const handleBranchChange = (newBranchId: string) => {
+    setBranchId(newBranchId);
+    setBatchId('');
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -80,6 +99,7 @@ export function AddPlayerModal({ isOpen, onClose, onSuccess, editingPlayer }: Ad
     formData.append('parentName', parentName);
     formData.append('parentPhone', parentPhone);
     formData.append('branchId', branchId);
+    formData.append('batchId', batchId);
     formData.append('status', status);
     formData.append('enrolledDate', enrolledDate);
     formData.append('aadharNumber', aadharNumber);
@@ -98,7 +118,6 @@ export function AddPlayerModal({ isOpen, onClose, onSuccess, editingPlayer }: Ad
         if (result.error) {
           setError(result.error);
         } else {
-          // Pass the created player back so parent can open the fees modal
           onSuccess(result.player as Player);
           onClose();
         }
@@ -151,7 +170,7 @@ export function AddPlayerModal({ isOpen, onClose, onSuccess, editingPlayer }: Ad
             </label>
             <select
               value={branchId}
-              onChange={(e) => setBranchId(e.target.value)}
+              onChange={(e) => handleBranchChange(e.target.value)}
               required
               className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent dark:bg-gray-800 dark:border-gray-700 dark:text-white"
             >
@@ -161,6 +180,24 @@ export function AddPlayerModal({ isOpen, onClose, onSuccess, editingPlayer }: Ad
               ))}
             </select>
           </div>
+
+          {branchId && filteredBatches.length > 0 && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Batch
+              </label>
+              <select
+                value={batchId}
+                onChange={(e) => setBatchId(e.target.value)}
+                className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+              >
+                <option value="">Select a batch...</option>
+                {filteredBatches.map((b) => (
+                  <option key={b.id} value={b.id}>{b.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div>
             <Input

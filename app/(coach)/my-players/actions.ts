@@ -14,6 +14,7 @@ export async function createCoachPlayer(formData: FormData) {
   const parentName = formData.get('parentName') as string
   const parentPhone = formData.get('parentPhone') as string
   const branchId = formData.get('branchId') as string
+  const batchId = formData.get('batchId') as string
   const enrolledDate = formData.get('enrolledDate') as string
   const aadharNumber = formData.get('aadharNumber') as string
 
@@ -53,6 +54,9 @@ export async function createCoachPlayer(formData: FormData) {
       parent_phone: cleanParentPhone,
       enrolled_date: enrolledDate,
       status: 'active',
+    }
+    if (batchId) {
+      insertData.batch_id = batchId
     }
     if (aadharNumber && aadharNumber.length === 12) {
       insertData.aadhar_number = aadharNumber

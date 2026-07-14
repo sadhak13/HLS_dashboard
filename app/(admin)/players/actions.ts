@@ -3,16 +3,13 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
 
-/**
- * Creates a new player from the admin dashboard
- * Validates: name + phone globally unique
- */
 export async function createAdminPlayer(formData: FormData) {
   const fullName = formData.get('fullName') as string
   const dob = formData.get('dob') as string
   const parentName = formData.get('parentName') as string
   const parentPhone = formData.get('parentPhone') as string
   const branchId = formData.get('branchId') as string
+  const batchId = formData.get('batchId') as string
   const status = formData.get('status') as string || 'active'
   const enrolledDate = formData.get('enrolledDate') as string || new Date().toISOString().split('T')[0]
   const aadharNumber = formData.get('aadharNumber') as string
@@ -20,7 +17,6 @@ export async function createAdminPlayer(formData: FormData) {
   const cleanFullName = fullName?.trim().replace(/\s+/g, ' ')
   const cleanParentPhone = parentPhone?.trim()
 
-  // Validation
   if (!cleanFullName) return { error: 'Full name is required' }
   if (!cleanParentPhone) return { error: 'Parent phone is required' }
   if (!branchId) return { error: 'Branch is required' }
@@ -28,7 +24,6 @@ export async function createAdminPlayer(formData: FormData) {
   const supabase = createAdminClient()
 
   try {
-    // Check for duplicate: same full_name + parent_phone combination globally
     const { data: existing } = await (supabase as any)
       .from('players')
       .select('id')
@@ -40,7 +35,6 @@ export async function createAdminPlayer(formData: FormData) {
       return { error: `Player "${cleanFullName}" with phone "${cleanParentPhone}" already exists in the system` }
     }
 
-    // Create player
     const insertData: any = {
       branch_id: branchId,
       full_name: cleanFullName,
@@ -49,6 +43,9 @@ export async function createAdminPlayer(formData: FormData) {
       parent_phone: cleanParentPhone,
       enrolled_date: enrolledDate,
       status: status,
+    }
+    if (batchId) {
+      insertData.batch_id = batchId
     }
     if (aadharNumber && aadharNumber.length === 12) {
       insertData.aadhar_number = aadharNumber
@@ -61,8 +58,7 @@ export async function createAdminPlayer(formData: FormData) {
       .single()
 
     if (insertError) throw insertError
-    
-    // Auto-create a pending fee record for the enrollment month
+
     const date = new Date(enrolledDate)
     const month = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
 
@@ -82,15 +78,13 @@ export async function createAdminPlayer(formData: FormData) {
   }
 }
 
-/**
- * Updates an existing player
- */
 export async function updateAdminPlayer(playerId: string, formData: FormData) {
   const fullName = formData.get('fullName') as string
   const dob = formData.get('dob') as string
   const parentName = formData.get('parentName') as string
   const parentPhone = formData.get('parentPhone') as string
   const branchId = formData.get('branchId') as string
+  const batchId = formData.get('batchId') as string
   const status = formData.get('status') as string
   const aadharNumber = formData.get('aadharNumber') as string
 
@@ -104,7 +98,6 @@ export async function updateAdminPlayer(playerId: string, formData: FormData) {
   const supabase = createAdminClient()
 
   try {
-    // Check for duplicate when updating (excluding the current player)
     const { data: existing } = await (supabase as any)
       .from('players')
       .select('id')
@@ -119,6 +112,7 @@ export async function updateAdminPlayer(playerId: string, formData: FormData) {
 
     const updateData: any = {
       branch_id: branchId,
+      batch_id: batchId || null,
       full_name: cleanFullName,
       date_of_birth: dob,
       parent_name: parentName?.trim(),
@@ -141,9 +135,6 @@ export async function updateAdminPlayer(playerId: string, formData: FormData) {
   }
 }
 
-/**
- * Soft delete player - mark as DROPPED
- */
 export async function deleteAdminPlayer(playerId: string) {
   const supabase = createAdminClient()
 

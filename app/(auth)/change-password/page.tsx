@@ -31,7 +31,10 @@ export default function ChangePasswordPage() {
     }
 
     setIsLoading(true);
-    const { error: updateError } = await supabase.auth.updateUser({ password });
+    const { error: updateError } = await supabase.auth.updateUser({
+      password,
+      data: { must_change_password: false },
+    });
 
     if (updateError) {
       setError(updateError.message || 'Failed to update password.');

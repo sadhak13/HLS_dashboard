@@ -28,11 +28,11 @@ export function Sidebar({ isOpen, setIsOpen }: { isOpen: boolean; setIsOpen: (va
 
       {/* Sidebar */}
       <aside 
-        className={`fixed inset-y-0 left-0 z-50 w-64 bg-gray-900 text-white shadow-2xl transition-transform duration-300 ease-in-out lg:static lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-50 w-64 bg-black/40 backdrop-blur-xl border-r border-white/[0.07] text-white shadow-2xl transition-transform duration-300 ease-in-out lg:static lg:translate-x-0 ${
           isOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
-        <div className="flex h-16 items-center justify-center border-b border-gray-800 bg-gray-950">
+        <div className="flex h-16 items-center justify-center border-b border-white/[0.07] bg-black/20">
           <div className="flex items-center gap-3 font-bold text-lg text-white">
             <Image 
               src="/HLS_logo.png" 

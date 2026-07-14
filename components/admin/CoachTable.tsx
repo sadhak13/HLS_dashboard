@@ -3,7 +3,7 @@
 import React from 'react';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table';
 import { Badge } from '@/components/ui/Badge';
-import { UserCircle } from 'lucide-react';
+import { UserCircle, Clock } from 'lucide-react';
 import { formatDate } from '@/utils/formatDate';
 
 interface CoachTableProps {
@@ -31,7 +31,7 @@ export function CoachTable({ coaches, isLoading }: CoachTableProps) {
       <TableHeader>
         <TableRow>
           <TableHead>Coach</TableHead>
-          <TableHead>Branch Assigned</TableHead>
+          <TableHead>Assigned Batches</TableHead>
           <TableHead>Contact</TableHead>
           <TableHead>Added On</TableHead>
           <TableHead>Status</TableHead>
@@ -60,8 +60,48 @@ export function CoachTable({ coaches, isLoading }: CoachTableProps) {
                 </div>
               </TableCell>
               <TableCell>
-                <div className="font-medium">{coach.branches?.name || 'Unassigned'}</div>
-                <div className="text-xs text-gray-500">{coach.branches?.location}</div>
+                {coach.coach_batches && coach.coach_batches.length > 0 ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {coach.coach_batches.map((cb: any) => {
+                      const batchName = cb.batches?.name || 'Unknown';
+                      const branchName = cb.batches?.branches?.name;
+                      const startTime = cb.batches?.start_time
+                        ? cb.batches.start_time.slice(0, 5)
+                        : null;
+                      const endTime = cb.batches?.end_time
+                        ? cb.batches.end_time.slice(0, 5)
+                        : null;
+                      const timeLabel = startTime && endTime
+                        ? `${startTime} - ${endTime}`
+                        : startTime || '';
+
+                      return (
+                        <span
+                          key={cb.batch_id || cb.id}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-800/30"
+                        >
+                          <Clock className="w-3 h-3" />
+                          {batchName}
+                          {branchName && (
+                            <span className="text-green-600/70 dark:text-green-500/70">
+                              · {branchName}
+                            </span>
+                          )}
+                          {timeLabel && (
+                            <span className="text-green-600/70 dark:text-green-500/70">
+                              · {timeLabel}
+                            </span>
+                          )}
+                        </span>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div>
+                    <div className="font-medium">{coach.branches?.name || 'Unassigned'}</div>
+                    <div className="text-xs text-gray-500">{coach.branches?.location}</div>
+                  </div>
+                )}
               </TableCell>
               <TableCell>{coach.phone || 'N/A'}</TableCell>
               <TableCell>{formatDate(coach.created_at)}</TableCell>

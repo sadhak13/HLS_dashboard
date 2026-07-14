@@ -15,7 +15,14 @@ interface AddPlayerModalProps {
   isOpen: boolean
   onClose: () => void
   onPlayerCreated: (player: { id: string; full_name: string; branch_id: string; enrolled_date: string }) => void
-  branchId?: string // Optional: can be passed directly from parent
+  branchId?: string
+}
+
+interface BatchOption {
+  id: string
+  name: string
+  start_time: string
+  end_time: string
 }
 
 export function AddPlayerModal({ isOpen, onClose, onPlayerCreated, branchId: propBranchId }: AddPlayerModalProps) {
@@ -26,6 +33,8 @@ export function AddPlayerModal({ isOpen, onClose, onPlayerCreated, branchId: pro
   const [error, setError] = useState('')
   const [branchId, setBranchId] = useState<string | null>(propBranchId || null)
   const [branches, setBranches] = useState<{ id: string; name: string }[]>([])
+  const [batches, setBatches] = useState<BatchOption[]>([])
+  const [selectedBatchId, setSelectedBatchId] = useState('')
 
   // Form state
   const [fullName, setFullName] = useState('')
@@ -35,7 +44,6 @@ export function AddPlayerModal({ isOpen, onClose, onPlayerCreated, branchId: pro
   const [enrolledDate, setEnrolledDate] = useState('')
   const [aadharNumber, setAadharNumber] = useState('')
 
-  // Get branch info on open
   useEffect(() => {
     if (isOpen && profile) {
       const fetchBranchInfo = async () => {
@@ -43,13 +51,11 @@ export function AddPlayerModal({ isOpen, onClose, onPlayerCreated, branchId: pro
           if (profile.role === 'ADMIN') {
             const { data } = await supabase.from('branches').select('id, name').order('name')
             if (data) setBranches(data)
-            if (!propBranchId) setBranchId(null) // Reset branchId if admin to force selection
+            if (!propBranchId) setBranchId(null)
           } else if (!propBranchId) {
-            // Try to use the RPC function first, as RLS policies on the coaches table might prevent direct SELECTs
             const { data: branchId, error } = await supabase.rpc('get_coach_branch_id')
 
             if (error) {
-              console.warn('RPC failed, falling back to direct table query...', error)
               const { data: coachData, error: coachError } = await (supabase as any)
                 .from('coaches')
                 .select('branch_id')
@@ -75,22 +81,36 @@ export function AddPlayerModal({ isOpen, onClose, onPlayerCreated, branchId: pro
       }
 
       fetchBranchInfo()
-      // Reset form
       setFullName('')
       setDob('')
       setParentName('')
       setParentPhone('')
       setEnrolledDate(new Date().toISOString().split('T')[0])
       setAadharNumber('')
+      setSelectedBatchId('')
       setError('')
     }
   }, [isOpen, profile, propBranchId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Fetch batches when branch is known
+  useEffect(() => {
+    if (branchId) {
+      const fetchBatches = async () => {
+        const { data } = await (supabase as any)
+          .from('batches')
+          .select('id, name, start_time, end_time')
+          .eq('branch_id', branchId)
+          .order('start_time')
+        if (data) setBatches(data)
+      }
+      fetchBatches()
+    }
+  }, [branchId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
 
-    // Validation
     if (!fullName.trim()) {
       setError('Full name is required')
       return
@@ -119,6 +139,7 @@ export function AddPlayerModal({ isOpen, onClose, onPlayerCreated, branchId: pro
     formData.append('parentName', parentName)
     formData.append('parentPhone', parentPhone)
     formData.append('branchId', branchId)
+    formData.append('batchId', selectedBatchId)
     formData.append('enrolledDate', enrolledDate)
     formData.append('aadharNumber', aadharNumber)
 
@@ -128,7 +149,6 @@ export function AddPlayerModal({ isOpen, onClose, onPlayerCreated, branchId: pro
       setError(result.error)
       setIsLoading(false)
     } else {
-      // Success - pass back to parent to open fees modal
       onPlayerCreated({
         id: result.playerId,
         full_name: result.playerName,
@@ -178,6 +198,24 @@ export function AddPlayerModal({ isOpen, onClose, onPlayerCreated, branchId: pro
             >
               <option value="">Select a branch...</option>
               {branches.map((b) => (
+                <option key={b.id} value={b.id}>{b.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {batches.length > 0 && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Batch
+            </label>
+            <select
+              value={selectedBatchId}
+              onChange={(e) => setSelectedBatchId(e.target.value)}
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+            >
+              <option value="">Select a batch...</option>
+              {batches.map((b) => (
                 <option key={b.id} value={b.id}>{b.name}</option>
               ))}
             </select>

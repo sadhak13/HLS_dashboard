@@ -29,6 +29,35 @@ export interface Database {
           created_at?: string
         }
       }
+      batches: {
+        Row: {
+          id: string
+          branch_id: string
+          name: string
+          start_time: string
+          end_time: string
+          days_of_week: string[]
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          branch_id: string
+          name: string
+          start_time: string
+          end_time: string
+          days_of_week: string[]
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          branch_id?: string
+          name?: string
+          start_time?: string
+          end_time?: string
+          days_of_week?: string[]
+          created_at?: string
+        }
+      }
       profiles: {
         Row: {
           id: string
@@ -72,10 +101,31 @@ export interface Database {
           created_at?: string
         }
       }
+      coach_batches: {
+        Row: {
+          id: string
+          coach_id: string
+          batch_id: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          coach_id: string
+          batch_id: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          coach_id?: string
+          batch_id?: string
+          created_at?: string
+        }
+      }
       players: {
         Row: {
           id: string
           branch_id: string
+          batch_id: string | null
           full_name: string
           date_of_birth: string
           parent_name: string
@@ -87,6 +137,7 @@ export interface Database {
         Insert: {
           id?: string
           branch_id: string
+          batch_id?: string | null
           full_name: string
           date_of_birth: string
           parent_name: string
@@ -98,6 +149,7 @@ export interface Database {
         Update: {
           id?: string
           branch_id?: string
+          batch_id?: string | null
           full_name?: string
           date_of_birth?: string
           parent_name?: string
@@ -112,6 +164,7 @@ export interface Database {
           id: string
           player_id: string
           branch_id: string
+          batch_id: string | null
           date: string
           status: 'present' | 'absent'
           created_at: string
@@ -120,6 +173,7 @@ export interface Database {
           id?: string
           player_id: string
           branch_id: string
+          batch_id?: string | null
           date: string
           status: 'present' | 'absent'
           created_at?: string
@@ -128,6 +182,7 @@ export interface Database {
           id?: string
           player_id?: string
           branch_id?: string
+          batch_id?: string | null
           date?: string
           status?: 'present' | 'absent'
           created_at?: string
@@ -180,6 +235,10 @@ export interface Database {
       get_coach_branch_id: {
         Args: Record<PropertyKey, never>
         Returns: string
+      }
+      get_coach_batch_ids: {
+        Args: Record<PropertyKey, never>
+        Returns: string[]
       }
     }
     Enums: {

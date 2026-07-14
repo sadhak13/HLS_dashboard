@@ -33,27 +33,38 @@ export function Modal({ isOpen, onClose, title, children, maxWidth = 'md' }: Mod
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto overflow-x-hidden outline-none focus:outline-none">
-      <div 
-        className="fixed inset-0 bg-gray-900/75 backdrop-blur-sm transition-opacity" 
+    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto overflow-x-hidden p-4">
+      {/* Backdrop */}
+      <div
+        className="fixed inset-0 bg-black/60 backdrop-blur-md transition-opacity"
         onClick={onClose}
-      ></div>
-      
-      <div className={`relative w-full ${maxWidthClasses[maxWidth]} p-4 mx-auto my-6 z-50`}>
-        <div className="relative flex flex-col w-full bg-white dark:bg-gray-800 border-0 rounded-xl shadow-2xl outline-none focus:outline-none">
+      />
+
+      {/* Modal */}
+      <div className={`relative w-full ${maxWidthClasses[maxWidth]} mx-auto z-50 animate-in fade-in zoom-in-95 duration-200`}>
+        <div className="relative flex flex-col w-full rounded-2xl overflow-hidden shadow-2xl border border-white/10"
+          style={{
+            background: 'linear-gradient(135deg, rgba(15,23,42,0.95) 0%, rgba(2,8,23,0.98) 100%)',
+            backdropFilter: 'blur(32px)',
+            boxShadow: '0 25px 50px -12px rgba(0,0,0,0.8), 0 0 0 1px rgba(255,255,255,0.05), inset 0 1px 0 rgba(255,255,255,0.08)',
+          }}
+        >
+          {/* Top accent line */}
+          <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-green-500/60 to-transparent" />
+
           {/* Header */}
-          <div className="flex items-start justify-between p-5 border-b border-solid rounded-t border-gray-200 dark:border-gray-700">
-            <h3 className="text-xl font-semibold text-gray-900 dark:text-white">
+          <div className="flex items-center justify-between px-6 py-5 border-b border-white/[0.07]">
+            <h3 className="text-lg font-semibold text-white tracking-tight">
               {title}
             </h3>
             <button
-              className="p-1 ml-auto bg-transparent border-0 text-gray-500 hover:text-gray-900 dark:hover:text-white transition-colors"
+              className="flex items-center justify-center w-8 h-8 rounded-xl bg-white/5 border border-white/10 text-gray-400 hover:text-white hover:bg-white/10 transition-all duration-200 active:scale-95"
               onClick={onClose}
             >
-              <X className="w-5 h-5" />
+              <X className="w-4 h-4" />
             </button>
           </div>
-          
+
           {/* Body */}
           <div className="relative p-6 flex-auto">
             {children}

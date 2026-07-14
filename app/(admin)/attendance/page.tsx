@@ -2,14 +2,22 @@
 
 import React, { useEffect, useState, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { CalendarDays, Filter, Users, CheckCircle, XCircle, TrendingUp, ChevronLeft, ChevronRight, Search } from 'lucide-react';
+import { CalendarDays, Filter, Users, CheckCircle, XCircle, TrendingUp, ChevronLeft, ChevronRight, Search, Clock } from 'lucide-react';
 
 interface AttendanceRecord {
   id: string;
   date: string;
   status: 'present' | 'absent';
+  batch_id: string | null;
   players: { full_name: string } | null;
   branches: { name: string } | null;
+  batches: { name: string } | null;
+}
+
+interface BatchOption {
+  id: string;
+  name: string;
+  branch_id: string;
 }
 
 function MiniCalendar({ selectedDate, onDateChange }: { selectedDate: string; onDateChange: (date: string) => void }) {
@@ -86,34 +94,51 @@ export default function AdminAttendancePage() {
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [branches, setBranches] = useState<{ id: string; name: string }[]>([]);
+  const [batches, setBatches] = useState<BatchOption[]>([]);
   const [selectedBranch, setSelectedBranch] = useState('all');
+  const [selectedBatch, setSelectedBatch] = useState('all');
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
-    const fetchBranches = async () => {
-      const { data } = await supabase.from('branches').select('id, name').order('name');
-      if (data) setBranches(data);
+    const fetchFilters = async () => {
+      const { data: branchData } = await supabase.from('branches').select('id, name').order('name');
+      if (branchData) setBranches(branchData);
+
+      const { data: batchData } = await (supabase as any).from('batches').select('id, name, branch_id').order('start_time');
+      if (batchData) setBatches(batchData);
     };
-    fetchBranches();
+    fetchFilters();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const filteredBatches = selectedBranch === 'all'
+    ? batches
+    : batches.filter(b => b.branch_id === selectedBranch);
+
+  const handleBranchChange = (value: string) => {
+    setSelectedBranch(value);
+    setSelectedBatch('all');
+  };
 
   const fetchAttendance = useCallback(async () => {
     setIsLoading(true);
-    let query = supabase
+    let query = (supabase as any)
       .from('attendance')
-      .select(`*, players(full_name), branches(name)`)
+      .select(`*, players(full_name), branches(name), batches(name)`)
       .eq('date', selectedDate)
       .order('created_at', { ascending: true });
 
     if (selectedBranch !== 'all') {
       query = query.eq('branch_id', selectedBranch);
     }
+    if (selectedBatch !== 'all') {
+      query = query.eq('batch_id', selectedBatch);
+    }
 
     const { data } = await query;
     setRecords((data as AttendanceRecord[]) ?? []);
     setIsLoading(false);
-  }, [selectedDate, selectedBranch]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selectedDate, selectedBranch, selectedBatch]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     fetchAttendance();
@@ -132,11 +157,11 @@ export default function AdminAttendancePage() {
   });
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-emerald-950 -m-6 p-6">
+    <div className="w-full space-y-6">
       {/* Header */}
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-white">Attendance Overview</h1>
-        <p className="text-sm text-gray-400 mt-1">View daily attendance records across all branches.</p>
+        <p className="text-sm text-gray-400 mt-1">View daily attendance records across all branches and batches.</p>
       </div>
 
       <div className="flex flex-col lg:flex-row gap-6">
@@ -155,7 +180,7 @@ export default function AdminAttendancePage() {
             </div>
             <select
               value={selectedBranch}
-              onChange={(e) => setSelectedBranch(e.target.value)}
+              onChange={(e) => handleBranchChange(e.target.value)}
               className="w-full px-3 py-2.5 bg-white/[0.05] border border-white/10 rounded-xl text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500/50 appearance-none cursor-pointer"
             >
               <option value="all" className="bg-slate-900">All Branches</option>
@@ -164,6 +189,26 @@ export default function AdminAttendancePage() {
               ))}
             </select>
           </div>
+
+          {/* Batch Filter */}
+          {filteredBatches.length > 0 && (
+            <div className="rounded-2xl backdrop-blur-2xl bg-white/[0.03] border border-white/10 p-5 space-y-3">
+              <div className="flex items-center gap-2">
+                <Clock className="w-4 h-4 text-gray-400" />
+                <span className="text-sm font-medium text-white">Batch</span>
+              </div>
+              <select
+                value={selectedBatch}
+                onChange={(e) => setSelectedBatch(e.target.value)}
+                className="w-full px-3 py-2.5 bg-white/[0.05] border border-white/10 rounded-xl text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500/50 appearance-none cursor-pointer"
+              >
+                <option value="all" className="bg-slate-900">All Batches</option>
+                {filteredBatches.map((b) => (
+                  <option key={b.id} value={b.id} className="bg-slate-900">{b.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {/* Stats */}
           <div className="rounded-2xl backdrop-blur-2xl bg-white/[0.03] border border-white/10 p-5 space-y-3">
@@ -238,16 +283,17 @@ export default function AdminAttendancePage() {
             ) : (
               <>
                 {/* Table Header */}
-                <div className="hidden sm:grid grid-cols-[2fr_1fr_1fr] gap-4 px-6 py-3 border-b border-white/10 bg-white/[0.02]">
+                <div className="hidden sm:grid grid-cols-[2fr_1fr_1fr_1fr] gap-4 px-6 py-3 border-b border-white/10 bg-white/[0.02]">
                   <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Player</span>
                   <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Branch</span>
+                  <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Batch</span>
                   <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider text-center">Status</span>
                 </div>
 
                 {/* Records */}
                 <div className="divide-y divide-white/5">
                   {filteredRecords.map((record) => (
-                    <div key={record.id} className="grid grid-cols-1 sm:grid-cols-[2fr_1fr_1fr] gap-2 sm:gap-4 px-6 py-4 hover:bg-white/[0.02] transition-colors">
+                    <div key={record.id} className="grid grid-cols-1 sm:grid-cols-[2fr_1fr_1fr_1fr] gap-2 sm:gap-4 px-6 py-4 hover:bg-white/[0.02] transition-colors">
                       {/* Player */}
                       <div className="flex items-center gap-3">
                         <div className={`flex items-center justify-center w-9 h-9 rounded-full text-sm font-semibold text-white ${
@@ -261,6 +307,11 @@ export default function AdminAttendancePage() {
                       {/* Branch */}
                       <div className="flex items-center sm:justify-start">
                         <span className="text-sm text-gray-400 sm:ml-0 ml-12">{record.branches?.name ?? '—'}</span>
+                      </div>
+
+                      {/* Batch */}
+                      <div className="flex items-center sm:justify-start">
+                        <span className="text-sm text-gray-400 sm:ml-0 ml-12">{record.batches?.name ?? '—'}</span>
                       </div>
 
                       {/* Status */}
