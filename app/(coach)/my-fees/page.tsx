@@ -9,6 +9,7 @@ import { Pagination } from '@/components/ui/Pagination';
 import { IndianRupee, Zap, ChevronLeft, ChevronRight, TrendingUp, Clock } from 'lucide-react';
 import { generateNextMonthFeesForBranch } from '@/app/(admin)/fees/actions';
 import { format, addMonths, subMonths, isAfter, startOfMonth } from 'date-fns';
+import { getCoachBranches } from '@/lib/coach';
 
 export default function MyFeesPage() {
   const { profile } = useAuth();
@@ -23,6 +24,7 @@ export default function MyFeesPage() {
   const [fees, setFees] = useState<FeeRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [branchId, setBranchId] = useState<string | null>(null);
+  const [branchIds, setBranchIds] = useState<string[]>([]);
   const [isGeneratingFees, setIsGeneratingFees] = useState(false);
   const [generateMessage, setGenerateMessage] = useState('');
   const [editingFee, setEditingFee] = useState<FeeRecord | null>(null);
@@ -34,30 +36,21 @@ export default function MyFeesPage() {
     if (!profile) return;
     setIsLoading(true);
 
-    const { data: rpcBranchId, error: rpcError } = await supabase.rpc('get_coach_branch_id');
+    const branches = await getCoachBranches(profile.id);
 
-    let resolvedBranchId: string = (rpcBranchId as any) as string;
-
-    if (rpcError || !resolvedBranchId) {
-      const { data: coachData } = await (supabase as any)
-        .from('coaches')
-        .select('branch_id')
-        .eq('user_id', profile.id)
-        .maybeSingle();
-
-      if (!coachData) {
-        setIsLoading(false);
-        return;
-      }
-      resolvedBranchId = coachData.branch_id;
+    if (branches.length === 0) {
+      setIsLoading(false);
+      return;
     }
 
-    setBranchId(resolvedBranchId as string);
+    const resolvedBranchIds = branches.map(b => b.id);
+    setBranchIds(resolvedBranchIds);
+    setBranchId(resolvedBranchIds[0]);
 
     const { data } = await (supabase as any)
       .from('fees')
       .select(`*, players(full_name, branch_id), branches(name)`)
-      .eq('branch_id', resolvedBranchId)
+      .in('branch_id', resolvedBranchIds)
       .eq('month', selectedMonthStr)
       .order('created_at', { ascending: false });
 
@@ -70,13 +63,12 @@ export default function MyFeesPage() {
   }, [fetchFees]);
 
   const handleMarkPaid = async (feeId: string) => {
-    if (!branchId) return;
+    if (branchIds.length === 0) return;
 
     const { error } = await (supabase as any)
       .from('fees')
       .update({ status: 'paid', paid_date: new Date().toISOString() })
-      .eq('id', feeId)
-      .eq('branch_id', branchId);
+      .eq('id', feeId);
 
     if (!error) {
       fetchFees();
@@ -84,23 +76,35 @@ export default function MyFeesPage() {
   };
 
   const handleGenerateNextMonthFees = async () => {
-    if (!branchId) return;
+    if (branchIds.length === 0) return;
 
     setIsGeneratingFees(true);
     setGenerateMessage('');
 
-    const result = await generateNextMonthFeesForBranch(branchId, selectedMonthStr);
+    let totalCreated = 0;
+    let hasError = false;
 
-    if (result.error) {
-      setGenerateMessage(`Error: ${result.error}`);
-    } else if (result.message) {
-      setGenerateMessage(result.message);
-    } else {
-      setGenerateMessage(`Successfully created fees for ${result.createdCount} players in ${selectedMonthDisplay}`);
-      setTimeout(() => {
-        setGenerateMessage('');
-        fetchFees();
-      }, 2000);
+    for (const bid of branchIds) {
+      const result = await generateNextMonthFeesForBranch(bid, selectedMonthStr);
+      if (result.error) {
+        setGenerateMessage(`Error: ${result.error}`);
+        hasError = true;
+        break;
+      } else if (result.createdCount) {
+        totalCreated += result.createdCount;
+      }
+    }
+
+    if (!hasError) {
+      if (totalCreated === 0) {
+        setGenerateMessage('All players already have fees for this month');
+      } else {
+        setGenerateMessage(`Successfully created fees for ${totalCreated} players in ${selectedMonthDisplay}`);
+        setTimeout(() => {
+          setGenerateMessage('');
+          fetchFees();
+        }, 2000);
+      }
     }
 
     setIsGeneratingFees(false);

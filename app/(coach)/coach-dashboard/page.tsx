@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client';
 import { Users, IndianRupee, CalendarDays, CheckCircle2 } from 'lucide-react';
 import { StatCard } from '@/components/ui/StatCard';
 import { GlassCard } from '@/components/ui/GlassCard';
+import { getCoachBranches } from '@/lib/coach';
 
 interface CoachDashboardStats {
   branchName: string;
@@ -32,30 +33,20 @@ export default function CoachDashboardPage() {
     if (!profile) return;
     setIsLoading(true);
 
-    const { data: rpcBranchId, error: rpcError } = await supabase.rpc('get_coach_branch_id');
+    const branches = await getCoachBranches(profile.id);
 
-    let branchId: string = (rpcBranchId as any) as string;
-    
-    if (rpcError || !branchId) {
-      console.warn('RPC failed or returned null, falling back to direct table query...', rpcError);
-      const { data: coachData } = await (supabase as any)
-        .from('coaches')
-        .select('branch_id')
-        .eq('user_id', profile.id)
-        .maybeSingle();
-
-      if (!coachData) {
-        setIsLoading(false);
-        return;
-      }
-      branchId = coachData.branch_id;
+    if (branches.length === 0) {
+      setIsLoading(false);
+      return;
     }
 
-    const [{ data: branchData }, { data: playersData }, { data: feesData }, { data: attendanceData }] = await Promise.all([
-      (supabase as any).from('branches').select('name').eq('id', branchId).single(),
-      (supabase as any).from('players').select('id').eq('branch_id', branchId).eq('status', 'active'),
-      (supabase as any).from('fees').select('amount,status').eq('branch_id', branchId).in('status', ['pending', 'overdue']),
-      (supabase as any).from('attendance').select('status').eq('branch_id', branchId).eq('date', today),
+    const branchIds = branches.map(b => b.id);
+    const branchNames = branches.map(b => b.name).join(', ');
+
+    const [{ data: playersData }, { data: feesData }, { data: attendanceData }] = await Promise.all([
+      (supabase as any).from('players').select('id').in('branch_id', branchIds).eq('status', 'active'),
+      (supabase as any).from('fees').select('amount,status').in('branch_id', branchIds).in('status', ['pending', 'overdue']),
+      (supabase as any).from('attendance').select('status').in('branch_id', branchIds).eq('date', today),
     ]);
 
     const pendingAmount = (feesData ?? []).reduce((sum: number, fee: any) => sum + Number(fee.amount || 0), 0);
@@ -63,7 +54,7 @@ export default function CoachDashboardPage() {
     const absentCount = (attendanceData ?? []).filter((row: any) => row.status === 'absent').length;
 
     setStats({
-      branchName: branchData?.name || 'Your branch',
+      branchName: branchNames,
       activePlayers: playersData?.length || 0,
       pendingAmount,
       presentCount,

@@ -1,11 +1,11 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
-import { AlertCircle, AlertTriangle } from 'lucide-react'
+import { AlertCircle, AlertTriangle, Trash2 } from 'lucide-react'
 import { deleteCoachPlayer } from '@/app/(coach)/my-players/actions'
-import { deleteAdminPlayer } from '@/app/(admin)/players/actions'
+import { deleteAdminPlayer, permanentDeleteAdminPlayer } from '@/app/(admin)/players/actions'
 import { createClient } from '@/lib/supabase/client'
 
 interface Player {
@@ -23,7 +23,6 @@ interface DeletePlayerModalProps {
   onClose: () => void
   onSuccess: () => void
   player?: Player | null
-  // 'admin' uses deleteAdminPlayer action; 'coach' (default) uses deleteCoachPlayer action
   deleteAction?: 'admin' | 'coach'
 }
 
@@ -37,10 +36,10 @@ export function DeletePlayerModal({ isOpen, onClose, onSuccess, player, deleteAc
   const [error, setError] = useState('')
   const [pendingFees, setPendingFees] = useState<PendingFeesSummary | null>(null)
   const [isFetchingFees, setIsFetchingFees] = useState(false)
+  const [confirmPermanentDelete, setConfirmPermanentDelete] = useState(false)
 
   const supabase = createClient()
 
-  // Fetch pending fees when modal opens
   useEffect(() => {
     if (isOpen && player) {
       const fetchPendingFees = async () => {
@@ -67,10 +66,11 @@ export function DeletePlayerModal({ isOpen, onClose, onSuccess, player, deleteAc
 
       fetchPendingFees()
       setError('')
+      setConfirmPermanentDelete(false)
     }
   }, [isOpen, player])
 
-  const handleDelete = async () => {
+  const handleDrop = async () => {
     if (!player) return
 
     setError('')
@@ -84,6 +84,25 @@ export function DeletePlayerModal({ isOpen, onClose, onSuccess, player, deleteAc
       setError(result.error)
       setIsLoading(false)
     } else {
+      setIsLoading(false)
+      onSuccess()
+      onClose()
+    }
+  }
+
+  const handlePermanentDelete = async () => {
+    if (!player) return
+
+    setError('')
+    setIsLoading(true)
+
+    const result = await permanentDeleteAdminPlayer(player.id)
+
+    if (result.error) {
+      setError(result.error)
+      setIsLoading(false)
+    } else {
+      setIsLoading(false)
       onSuccess()
       onClose()
     }
@@ -101,23 +120,13 @@ export function DeletePlayerModal({ isOpen, onClose, onSuccess, player, deleteAc
   if (!player) return null
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Drop Player">
+    <Modal isOpen={isOpen} onClose={onClose} title={deleteAction === 'admin' ? 'Remove Player' : 'Drop Player'}>
       <div className="space-y-4">
         {error && (
           <div className="p-3 text-sm text-red-600 bg-red-50 rounded-md dark:bg-red-900/20 dark:text-red-400">
             {error}
           </div>
         )}
-
-        <div className="flex gap-3 p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-200 dark:border-yellow-800">
-          <AlertCircle className="h-5 w-5 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
-          <div className="text-sm text-yellow-700 dark:text-yellow-200">
-            <p className="font-medium mb-1">Player will be marked as DROPPED</p>
-            <p className="text-xs opacity-90">
-              The player record and all fee history will be kept for reference. This action can be undone by an admin.
-            </p>
-          </div>
-        </div>
 
         {/* Player details */}
         <div className="space-y-3 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
@@ -136,7 +145,9 @@ export function DeletePlayerModal({ isOpen, onClose, onSuccess, player, deleteAc
                 className={`inline-block px-2.5 py-1 rounded-full text-xs font-medium ${
                   player.status === 'active'
                     ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                    : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300'
+                    : player.status === 'dropped'
+                      ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                      : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300'
                 }`}
               >
                 {player.status === 'active' ? 'Active' : player.status === 'inactive' ? 'Inactive' : 'Dropped'}
@@ -166,10 +177,13 @@ export function DeletePlayerModal({ isOpen, onClose, onSuccess, player, deleteAc
             <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
             <div className="text-sm text-red-700 dark:text-red-300">
               <p className="font-medium mb-0.5">
-                ⚠️ {pendingFees.count} unpaid fee{pendingFees.count > 1 ? 's' : ''} — ₹{pendingFees.totalAmount.toLocaleString('en-IN')}
+                {pendingFees.count} unpaid fee{pendingFees.count > 1 ? 's' : ''} — ₹{pendingFees.totalAmount.toLocaleString('en-IN')}
               </p>
               <p className="text-xs opacity-80">
-                These fee records will remain in the system and will still be visible in your fees tab.
+                {deleteAction === 'admin' && confirmPermanentDelete
+                  ? 'These records will be permanently deleted along with the player.'
+                  : 'These fee records will remain in the system after dropping.'
+                }
               </p>
             </div>
           </div>
@@ -179,13 +193,73 @@ export function DeletePlayerModal({ isOpen, onClose, onSuccess, player, deleteAc
           </div>
         ) : null}
 
-        <div className="flex justify-end gap-3 mt-6">
-          <Button type="button" variant="ghost" onClick={onClose} disabled={isLoading}>
-            Cancel
-          </Button>
-          <Button type="button" variant="danger" onClick={handleDelete} isLoading={isLoading}>
-            Drop Player
-          </Button>
+        {/* Drop option info */}
+        {!confirmPermanentDelete && (
+          <div className="flex gap-3 p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-200 dark:border-yellow-800">
+            <AlertCircle className="h-5 w-5 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
+            <div className="text-sm text-yellow-700 dark:text-yellow-200">
+              <p className="font-medium mb-1">Player will be marked as DROPPED</p>
+              <p className="text-xs opacity-90">
+                The player record and all fee/attendance history will be kept for reference. This action can be undone by an admin.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Permanent delete confirmation (admin only) */}
+        {deleteAction === 'admin' && confirmPermanentDelete && (
+          <div className="flex gap-3 p-4 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800">
+            <Trash2 className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+            <div className="text-sm text-red-700 dark:text-red-200">
+              <p className="font-medium mb-1">PERMANENT DELETION</p>
+              <p className="text-xs opacity-90">
+                This will permanently remove the player and ALL their attendance and fee records from the database. This action CANNOT be undone.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Action buttons */}
+        <div className="flex flex-col gap-3 mt-6">
+          {/* Main action row */}
+          <div className="flex justify-end gap-3">
+            <Button type="button" variant="ghost" onClick={onClose} disabled={isLoading}>
+              Cancel
+            </Button>
+            {confirmPermanentDelete ? (
+              <Button type="button" variant="danger" onClick={handlePermanentDelete} isLoading={isLoading}>
+                Yes, Permanently Delete
+              </Button>
+            ) : (
+              <Button type="button" variant="danger" onClick={handleDrop} isLoading={isLoading}>
+                Drop Player
+              </Button>
+            )}
+          </div>
+
+          {/* Permanent delete toggle (admin only) */}
+          {deleteAction === 'admin' && (
+            <div className="border-t border-gray-200 dark:border-gray-700 pt-3">
+              {!confirmPermanentDelete ? (
+                <button
+                  type="button"
+                  onClick={() => setConfirmPermanentDelete(true)}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/10 hover:bg-red-100 dark:hover:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg transition-colors"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  Permanently Delete Instead
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setConfirmPermanentDelete(false)}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700 rounded-lg transition-colors"
+                >
+                  Go back to Drop instead
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </Modal>

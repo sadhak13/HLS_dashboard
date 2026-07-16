@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useCallback } from 'react';
 import { PlayerTable } from '@/components/admin/PlayerTable';
-import { AddPlayerModal } from '@/components/admin/AddPlayerModal';
+import { AddPlayerModal } from '@/components/shared/AddPlayerModal';
 import { AddFeesForNewPlayerModal } from '@/components/coach/AddFeesForNewPlayerModal';
 import { DeletePlayerModal } from '@/components/coach/DeletePlayerModal';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -70,17 +70,11 @@ export default function PlayersPage() {
     setEditingPlayer(null);
   };
 
-  // Called after AddPlayerModal succeeds. If a new player was created, open the fees modal.
-  const handlePlayerSuccess = (newPlayer?: any) => {
+  // Called after AddPlayerModal succeeds. If player data is returned (new player), open the fees modal.
+  const handlePlayerSuccess = (playerData?: { id: string; full_name: string; branch_id: string; enrolled_date: string }) => {
     fetchPlayers();
-    if (newPlayer) {
-      // New player was created - open fees popup
-      setNewPlayerData({
-        id: newPlayer.id,
-        full_name: newPlayer.full_name,
-        branch_id: newPlayer.branch_id,
-        enrolled_date: newPlayer.enrolled_date,
-      });
+    if (playerData?.id) {
+      setNewPlayerData(playerData);
       setShowAddFeesModal(true);
     }
   };

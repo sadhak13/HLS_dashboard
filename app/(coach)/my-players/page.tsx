@@ -3,11 +3,12 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import { useAuth } from '@/context/AuthContext'
 import { createClient } from '@/lib/supabase/client'
-import { Users, Phone, Plus, Trash2, Search, UserCircle } from 'lucide-react'
-import { AddPlayerModal } from '@/components/coach/AddPlayerModal'
+import { Users, Phone, Plus, Trash2, Search, UserCircle, Pencil } from 'lucide-react'
+import { AddPlayerModal } from '@/components/shared/AddPlayerModal'
 import { AddFeesForNewPlayerModal } from '@/components/coach/AddFeesForNewPlayerModal'
 import { DeletePlayerModal } from '@/components/coach/DeletePlayerModal'
 import { Pagination } from '@/components/ui/Pagination'
+import { getCoachBranches, type CoachBranch } from '@/lib/coach'
 
 interface PlayerRecord {
   id: string
@@ -17,6 +18,9 @@ interface PlayerRecord {
   parent_phone: string
   date_of_birth: string
   enrolled_date: string
+  branch_id?: string
+  batch_id?: string
+  aadhar_number?: string
 }
 
 export default function MyPlayersPage() {
@@ -26,6 +30,8 @@ export default function MyPlayersPage() {
   const [players, setPlayers] = useState<PlayerRecord[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [branchId, setBranchId] = useState('')
+  const [coachBranches, setCoachBranches] = useState<CoachBranch[]>([])
+  const [selectedBranchFilter, setSelectedBranchFilter] = useState<string>('all')
   const [searchQuery, setSearchQuery] = useState('')
 
   // Modal states
@@ -41,6 +47,7 @@ export default function MyPlayersPage() {
     enrolled_date: string
   } | null>(null)
   const [playerToDelete, setPlayerToDelete] = useState<PlayerRecord | null>(null)
+  const [playerToEdit, setPlayerToEdit] = useState<PlayerRecord | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
   const ITEMS_PER_PAGE = 15
 
@@ -48,30 +55,21 @@ export default function MyPlayersPage() {
     if (!profile) return
     setIsLoading(true)
 
-    const { data: rpcBranchId, error: rpcError } = await supabase.rpc('get_coach_branch_id')
+    const branches = await getCoachBranches(profile.id)
+    setCoachBranches(branches)
 
-    let resolvedBranchId: any = rpcBranchId
-
-    if (rpcError || !resolvedBranchId) {
-      const { data: coachData } = await (supabase as any)
-        .from('coaches')
-        .select('branch_id')
-        .eq('user_id', profile.id)
-        .maybeSingle()
-
-      if (!coachData) {
-        setIsLoading(false)
-        return
-      }
-      resolvedBranchId = coachData.branch_id
+    if (branches.length === 0) {
+      setIsLoading(false)
+      return
     }
 
-    setBranchId(resolvedBranchId as string)
+    setBranchId(branches[0].id)
+    const branchIds = branches.map(b => b.id)
 
     const { data } = await (supabase as any)
       .from('players')
-      .select('id, full_name, status, parent_name, parent_phone, date_of_birth, enrolled_date')
-      .eq('branch_id', resolvedBranchId)
+      .select('id, full_name, status, parent_name, parent_phone, date_of_birth, enrolled_date, batch_id, aadhar_number, branch_id')
+      .in('branch_id', branchIds)
       .order('full_name')
 
     setPlayers((data as PlayerRecord[]) ?? [])
@@ -82,20 +80,24 @@ export default function MyPlayersPage() {
     fetchPlayers()
   }, [fetchPlayers])
 
-  const handlePlayerCreated = (playerData: {
-    id: string
-    full_name: string
-    branch_id: string
-    enrolled_date: string
-  }) => {
-    setNewPlayerData(playerData)
+  const handlePlayerSuccess = (playerData?: { id: string; full_name: string; branch_id: string; enrolled_date: string }) => {
     setShowAddPlayerModal(false)
-    setShowAddFeesModal(true)
+    setPlayerToEdit(null)
+    if (playerData?.id) {
+      setNewPlayerData(playerData)
+      setShowAddFeesModal(true)
+    }
+    fetchPlayers()
   }
 
   const handleFeesAdded = () => {
     setShowAddFeesModal(false)
     fetchPlayers()
+  }
+
+  const handleEditClick = (player: PlayerRecord) => {
+    setPlayerToEdit(player)
+    setShowAddPlayerModal(true)
   }
 
   const handleDeleteClick = (player: PlayerRecord) => {
@@ -113,10 +115,12 @@ export default function MyPlayersPage() {
   const inactivePlayersCount = players.filter((p) => p.status === 'inactive').length
   const droppedPlayersCount = players.filter((p) => p.status === 'dropped').length
 
-  const filteredPlayers = players.filter(p =>
-    p.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    p.parent_name.toLowerCase().includes(searchQuery.toLowerCase())
-  )
+  const filteredPlayers = players.filter(p => {
+    const matchesSearch = p.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      p.parent_name.toLowerCase().includes(searchQuery.toLowerCase())
+    const matchesBranch = selectedBranchFilter === 'all' || p.branch_id === selectedBranchFilter
+    return matchesSearch && matchesBranch
+  })
 
   const totalPages = Math.ceil(filteredPlayers.length / ITEMS_PER_PAGE)
   const paginatedPlayers = filteredPlayers.slice(
@@ -174,17 +178,31 @@ export default function MyPlayersPage() {
         </div>
       </div>
 
-      {/* Search */}
+      {/* Search + Branch Filter */}
       {players.length > 0 && (
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
-          <input
-            type="text"
-            placeholder="Search by name or parent..."
-            value={searchQuery}
-            onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
-            className="w-full pl-9 pr-4 py-2.5 bg-white/[0.05] border border-white/10 rounded-xl text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-green-500/50"
-          />
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+            <input
+              type="text"
+              placeholder="Search by name or parent..."
+              value={searchQuery}
+              onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
+              className="w-full pl-9 pr-4 py-2.5 bg-white/[0.05] border border-white/10 rounded-xl text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-green-500/50"
+            />
+          </div>
+          {coachBranches.length > 1 && (
+            <select
+              value={selectedBranchFilter}
+              onChange={(e) => { setSelectedBranchFilter(e.target.value); setCurrentPage(1); }}
+              className="px-4 py-2.5 bg-white/[0.05] border border-white/10 rounded-xl text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500/50 appearance-none cursor-pointer"
+            >
+              <option value="all" className="bg-slate-900">All Branches</option>
+              {coachBranches.map(b => (
+                <option key={b.id} value={b.id} className="bg-slate-900">{b.name}</option>
+              ))}
+            </select>
+          )}
         </div>
       )}
 
@@ -271,11 +289,18 @@ export default function MyPlayersPage() {
                 </div>
 
                 {/* Actions */}
-                <div className="flex items-center justify-end">
+                <div className="flex items-center justify-end gap-1">
+                  <button
+                    onClick={() => handleEditClick(player)}
+                    className="p-2 rounded-lg text-gray-500 hover:text-blue-400 hover:bg-blue-500/10 transition-all"
+                    title="Edit player"
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </button>
                   <button
                     onClick={() => handleDeleteClick(player)}
                     className="p-2 rounded-lg text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-all"
-                    title="Delete player"
+                    title="Drop player"
                   >
                     <Trash2 className="h-4 w-4" />
                   </button>
@@ -310,8 +335,9 @@ export default function MyPlayersPage() {
       {/* Modals */}
       <AddPlayerModal
         isOpen={showAddPlayerModal}
-        onClose={() => setShowAddPlayerModal(false)}
-        onPlayerCreated={handlePlayerCreated}
+        onClose={() => { setShowAddPlayerModal(false); setPlayerToEdit(null); }}
+        onSuccess={handlePlayerSuccess}
+        editingPlayer={playerToEdit}
       />
 
       <AddFeesForNewPlayerModal

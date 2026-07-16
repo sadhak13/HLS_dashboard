@@ -6,6 +6,7 @@ import { revalidatePath } from 'next/cache'
 export async function createAdminPlayer(formData: FormData) {
   const fullName = formData.get('fullName') as string
   const dob = formData.get('dob') as string
+  const gender = formData.get('gender') as string || 'male'
   const parentName = formData.get('parentName') as string
   const parentPhone = formData.get('parentPhone') as string
   const branchId = formData.get('branchId') as string
@@ -39,6 +40,7 @@ export async function createAdminPlayer(formData: FormData) {
       branch_id: branchId,
       full_name: cleanFullName,
       date_of_birth: dob,
+      gender: gender,
       parent_name: parentName?.trim(),
       parent_phone: cleanParentPhone,
       enrolled_date: enrolledDate,
@@ -81,6 +83,7 @@ export async function createAdminPlayer(formData: FormData) {
 export async function updateAdminPlayer(playerId: string, formData: FormData) {
   const fullName = formData.get('fullName') as string
   const dob = formData.get('dob') as string
+  const gender = formData.get('gender') as string || 'male'
   const parentName = formData.get('parentName') as string
   const parentPhone = formData.get('parentPhone') as string
   const branchId = formData.get('branchId') as string
@@ -115,6 +118,7 @@ export async function updateAdminPlayer(playerId: string, formData: FormData) {
       batch_id: batchId || null,
       full_name: cleanFullName,
       date_of_birth: dob,
+      gender: gender,
       parent_name: parentName?.trim(),
       parent_phone: cleanParentPhone,
       status: status,
@@ -150,5 +154,36 @@ export async function deleteAdminPlayer(playerId: string) {
     return { success: true }
   } catch (err: any) {
     return { error: err.message || 'Failed to delete player' }
+  }
+}
+
+export async function permanentDeleteAdminPlayer(playerId: string) {
+  const supabase = createAdminClient()
+
+  try {
+    // Delete attendance records first (foreign key dependency)
+    await (supabase as any)
+      .from('attendance')
+      .delete()
+      .eq('player_id', playerId)
+
+    // Delete fee records
+    await (supabase as any)
+      .from('fees')
+      .delete()
+      .eq('player_id', playerId)
+
+    // Delete the player record
+    const { error } = await (supabase as any)
+      .from('players')
+      .delete()
+      .eq('id', playerId)
+
+    if (error) throw error
+
+    revalidatePath('/players')
+    return { success: true }
+  } catch (err: any) {
+    return { error: err.message || 'Failed to permanently delete player' }
   }
 }

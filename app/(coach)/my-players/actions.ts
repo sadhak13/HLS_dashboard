@@ -11,6 +11,7 @@ import { revalidatePath } from 'next/cache'
 export async function createCoachPlayer(formData: FormData) {
   const fullName = formData.get('fullName') as string
   const dob = formData.get('dob') as string
+  const gender = formData.get('gender') as string || 'male'
   const parentName = formData.get('parentName') as string
   const parentPhone = formData.get('parentPhone') as string
   const branchId = formData.get('branchId') as string
@@ -50,6 +51,7 @@ export async function createCoachPlayer(formData: FormData) {
       branch_id: branchId,
       full_name: cleanFullName,
       date_of_birth: dob,
+      gender: gender,
       parent_name: parentName.trim(),
       parent_phone: cleanParentPhone,
       enrolled_date: enrolledDate,
@@ -89,6 +91,63 @@ export async function createCoachPlayer(formData: FormData) {
     return { success: true, playerId: newPlayer.id, playerName: newPlayer.full_name }
   } catch (err: any) {
     return { error: err.message || 'Failed to create player' }
+  }
+}
+
+/**
+ * Updates player details (coach can edit players in their branch)
+ */
+export async function updateCoachPlayer(playerId: string, formData: FormData) {
+  const fullName = formData.get('fullName') as string
+  const dob = formData.get('dob') as string
+  const gender = formData.get('gender') as string || 'male'
+  const parentName = formData.get('parentName') as string
+  const parentPhone = formData.get('parentPhone') as string
+  const aadharNumber = formData.get('aadharNumber') as string
+  const batchId = formData.get('batchId') as string
+
+  const cleanFullName = fullName?.trim().replace(/\s+/g, ' ')
+  const cleanParentPhone = parentPhone?.trim()
+
+  if (!cleanFullName) return { error: 'Full name is required' }
+  if (!cleanParentPhone) return { error: 'Parent phone is required' }
+
+  const supabase = createAdminClient()
+
+  try {
+    const { data: existing } = await (supabase as any)
+      .from('players')
+      .select('id')
+      .eq('full_name', cleanFullName)
+      .eq('parent_phone', cleanParentPhone)
+      .neq('id', playerId)
+      .single()
+
+    if (existing) {
+      return { error: `Another player "${cleanFullName}" with phone "${cleanParentPhone}" already exists` }
+    }
+
+    const updateData: any = {
+      full_name: cleanFullName,
+      date_of_birth: dob || null,
+      gender: gender,
+      parent_name: parentName?.trim() || null,
+      parent_phone: cleanParentPhone,
+      batch_id: batchId || null,
+      aadhar_number: (aadharNumber && aadharNumber.length === 12) ? aadharNumber : null,
+    }
+
+    const { error: updateError } = await (supabase as any)
+      .from('players')
+      .update(updateData)
+      .eq('id', playerId)
+
+    if (updateError) throw updateError
+
+    revalidatePath('/my-players')
+    return { success: true }
+  } catch (err: any) {
+    return { error: err.message || 'Failed to update player' }
   }
 }
 
