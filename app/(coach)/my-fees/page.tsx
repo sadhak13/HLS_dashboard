@@ -23,8 +23,9 @@ export default function MyFeesPage() {
 
   const [fees, setFees] = useState<FeeRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [branchId, setBranchId] = useState<string | null>(null);
   const [branchIds, setBranchIds] = useState<string[]>([]);
+  const [coachBranches, setCoachBranches] = useState<{ id: string; name: string }[]>([]);
+  const [selectedBranchFilter, setSelectedBranchFilter] = useState<string>('all');
   const [isGeneratingFees, setIsGeneratingFees] = useState(false);
   const [generateMessage, setGenerateMessage] = useState('');
   const [editingFee, setEditingFee] = useState<FeeRecord | null>(null);
@@ -45,7 +46,7 @@ export default function MyFeesPage() {
 
     const resolvedBranchIds = branches.map(b => b.id);
     setBranchIds(resolvedBranchIds);
-    setBranchId(resolvedBranchIds[0]);
+    setCoachBranches(branches);
 
     const { data } = await (supabase as any)
       .from('fees')
@@ -128,13 +129,17 @@ export default function MyFeesPage() {
   const canGenerate = selectedMonthStr >= currentSystemMonthStr;
   const isNextDisabled = isAfter(addMonths(currentMonthDate, 1), maxMonth);
 
-  const paidTotal = fees.filter((fee) => fee.status === 'paid').reduce((sum, fee) => sum + fee.amount, 0);
-  const pendingTotal = fees.filter((fee) => fee.status !== 'paid').reduce((sum, fee) => sum + fee.amount, 0);
-  const paidCount = fees.filter((fee) => fee.status === 'paid').length;
-  const pendingCount = fees.filter((fee) => fee.status !== 'paid').length;
+  const filteredFees = selectedBranchFilter === 'all'
+    ? fees
+    : fees.filter(fee => fee.players?.branch_id === selectedBranchFilter);
 
-  const totalPages = Math.ceil(fees.length / ITEMS_PER_PAGE);
-  const paginatedFees = fees.slice(
+  const paidTotal = filteredFees.filter((fee) => fee.status === 'paid').reduce((sum, fee) => sum + fee.amount, 0);
+  const pendingTotal = filteredFees.filter((fee) => fee.status !== 'paid').reduce((sum, fee) => sum + fee.amount, 0);
+  const paidCount = filteredFees.filter((fee) => fee.status === 'paid').length;
+  const pendingCount = filteredFees.filter((fee) => fee.status !== 'paid').length;
+
+  const totalPages = Math.ceil(filteredFees.length / ITEMS_PER_PAGE);
+  const paginatedFees = filteredFees.slice(
     (currentPage - 1) * ITEMS_PER_PAGE,
     currentPage * ITEMS_PER_PAGE
   );
@@ -196,6 +201,22 @@ export default function MyFeesPage() {
         </div>
       </div>
 
+      {/* Branch Filter */}
+      {coachBranches.length > 1 && (
+        <div className="rounded-2xl bg-white/[0.03] border border-white/10 p-4">
+          <select
+            value={selectedBranchFilter}
+            onChange={(e) => { setSelectedBranchFilter(e.target.value); setCurrentPage(1); }}
+            className="w-full px-4 py-2.5 bg-white/[0.05] border border-white/10 rounded-xl text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500/50 appearance-none cursor-pointer"
+          >
+            <option value="all" className="bg-slate-900">All Branches</option>
+            {coachBranches.map(b => (
+              <option key={b.id} value={b.id} className="bg-slate-900">{b.name}</option>
+            ))}
+          </select>
+        </div>
+      )}
+
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
         <div className="rounded-2xl bg-white/[0.03] border border-white/10 p-4">
@@ -230,9 +251,9 @@ export default function MyFeesPage() {
             <div>
               <p className="text-[10px] sm:text-xs text-gray-500 font-medium uppercase tracking-wider">Collection Rate</p>
               <p className="text-lg sm:text-xl font-bold text-white">
-                {fees.length > 0 ? Math.round((paidCount / fees.length) * 100) : 0}%
+                {filteredFees.length > 0 ? Math.round((paidCount / filteredFees.length) * 100) : 0}%
               </p>
-              <p className="text-[10px] text-gray-500">{fees.length} total</p>
+              <p className="text-[10px] text-gray-500">{filteredFees.length} total</p>
             </div>
           </div>
         </div>
@@ -244,7 +265,7 @@ export default function MyFeesPage() {
           <div className="flex items-center justify-center py-16">
             <div className="w-8 h-8 border-2 border-green-500 border-t-transparent rounded-full animate-spin" />
           </div>
-        ) : fees.length === 0 ? (
+        ) : filteredFees.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 px-4">
             <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center mb-4">
               <IndianRupee className="w-8 h-8 text-gray-500" />
@@ -263,7 +284,7 @@ export default function MyFeesPage() {
                 setIsEditModalOpen(true);
               }}
             />
-            {fees.length > ITEMS_PER_PAGE && (
+            {filteredFees.length > ITEMS_PER_PAGE && (
               <div className="border-t border-white/10 px-4 py-3">
                 <Pagination
                   currentPage={currentPage}
