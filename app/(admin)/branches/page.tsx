@@ -70,7 +70,7 @@ export default function BranchesPage() {
       { data: batchData },
       { data: playerData },
     ] = await Promise.all([
-      supabase.from('branches').select('*').order('created_at', { ascending: false }),
+      supabase.from('branches').select('*').order('name', { ascending: true }),
       (supabase as any).from('batches').select('*').order('start_time', { ascending: true }),
       (supabase as any)
         .from('players')
