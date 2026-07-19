@@ -5,7 +5,7 @@ import { AddBranchModal } from '@/components/admin/AddBranchModal';
 import { AddBatchModal } from '@/components/admin/AddBatchModal';
 import { EditBranchModal } from '@/components/admin/EditBranchModal';
 import { EditBatchModal } from '@/components/admin/EditBatchModal';
-import { MapPin, Plus, Clock, ChevronRight, Users, Edit2 } from 'lucide-react';
+import { MapPin, Plus, Clock, ChevronRight, Users, Edit2, Trash2 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/context/AuthContext';
 import type { Database } from '@/types/database.types';
@@ -44,6 +44,11 @@ export default function BranchesPage() {
   const [isEditBatchModalOpen, setIsEditBatchModalOpen] = useState(false);
   const [selectedBatchForEdit, setSelectedBatchForEdit] = useState<Batch | null>(null);
   const [selectedBranchForEditBatch, setSelectedBranchForEditBatch] = useState<Branch | null>(null);
+
+  // Delete confirmations
+  const [deletingBranchId, setDeletingBranchId] = useState<string | null>(null);
+  const [deletingBatchId, setDeletingBatchId] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const [expandedBranches, setExpandedBranches] = useState<Set<string>>(new Set());
 
@@ -122,6 +127,36 @@ export default function BranchesPage() {
   const openBatchModal = (branch: Branch) => {
     setSelectedBranchForBatch(branch);
     setIsBatchModalOpen(true);
+  };
+
+  const handleDeleteBranch = async (branchId: string) => {
+    setIsDeleting(true);
+    try {
+      // Delete all batches in this branch first
+      await (supabase as any).from('batches').delete().eq('branch_id', branchId);
+      const { error } = await supabase.from('branches').delete().eq('id', branchId);
+      if (error) throw error;
+      fetchBranches();
+    } catch (err: any) {
+      alert(err.message || 'Failed to delete branch');
+    } finally {
+      setIsDeleting(false);
+      setDeletingBranchId(null);
+    }
+  };
+
+  const handleDeleteBatch = async (batchId: string) => {
+    setIsDeleting(true);
+    try {
+      const { error } = await (supabase as any).from('batches').delete().eq('id', batchId);
+      if (error) throw error;
+      fetchBranches();
+    } catch (err: any) {
+      alert(err.message || 'Failed to delete batch');
+    } finally {
+      setIsDeleting(false);
+      setDeletingBatchId(null);
+    }
   };
 
   const totalBatches = branches.reduce((sum, b) => sum + b.batches.length, 0);
@@ -244,17 +279,29 @@ export default function BranchesPage() {
                           {branch.name}
                         </h3>
                         {isAdmin && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSelectedBranchForEdit(branch);
-                              setIsEditBranchModalOpen(true);
-                            }}
-                            className="p-1 rounded-lg text-gray-400 hover:text-green-400 hover:bg-white/10 transition-all duration-250 active:scale-90"
-                            title="Edit Branch"
-                          >
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </button>
+                          <>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedBranchForEdit(branch);
+                                setIsEditBranchModalOpen(true);
+                              }}
+                              className="p-1 rounded-lg text-gray-400 hover:text-green-400 hover:bg-white/10 transition-all duration-250 active:scale-90"
+                              title="Edit Branch"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setDeletingBranchId(branch.id);
+                              }}
+                              className="p-1 rounded-lg text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-all duration-250 active:scale-90"
+                              title="Delete Branch"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </>
                         )}
                       </div>
                       <p className="text-xs sm:text-sm text-gray-400 truncate">{branch.location}</p>
@@ -359,6 +406,19 @@ export default function BranchesPage() {
                                   >
                                     <Edit2 className="w-3.5 h-3.5" />
                                   </button>
+                                  {/* Delete Batch button */}
+                                  {isAdmin && (
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setDeletingBatchId(batch.id);
+                                      }}
+                                      className="p-1 rounded-lg text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-all duration-250 active:scale-90"
+                                      title="Delete Batch"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  )}
                                 </div>
                               </div>
                             );
@@ -414,6 +474,78 @@ export default function BranchesPage() {
         branch={selectedBranchForEditBatch}
         batch={selectedBatchForEdit}
       />
+
+      {/* Delete Branch Confirmation */}
+      {deletingBranchId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setDeletingBranchId(null)} />
+          <div className="relative bg-[#1a1a2e]/95 backdrop-blur-xl border border-white/10 rounded-2xl p-6 max-w-sm w-full shadow-2xl">
+            <div className="flex flex-col items-center text-center gap-4">
+              <div className="w-12 h-12 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center">
+                <Trash2 className="w-6 h-6 text-red-400" />
+              </div>
+              <div>
+                <p className="text-white font-semibold text-lg">Delete Branch?</p>
+                <p className="text-sm text-gray-400 mt-1">
+                  This will permanently delete this branch and all its batches. This action cannot be undone.
+                </p>
+              </div>
+              <div className="flex items-center gap-3 w-full mt-2">
+                <button
+                  onClick={() => setDeletingBranchId(null)}
+                  disabled={isDeleting}
+                  className="flex-1 px-4 py-2.5 rounded-xl text-sm font-medium text-gray-400 bg-white/[0.04] border border-white/10 hover:bg-white/[0.08] hover:text-gray-200 transition-all duration-200 active:scale-95"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => handleDeleteBranch(deletingBranchId)}
+                  disabled={isDeleting}
+                  className="flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold text-white bg-red-600 hover:bg-red-500 border border-red-500/30 shadow-lg shadow-red-500/20 transition-all duration-200 active:scale-95 disabled:opacity-60"
+                >
+                  {isDeleting ? 'Deleting…' : 'Delete'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Batch Confirmation */}
+      {deletingBatchId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setDeletingBatchId(null)} />
+          <div className="relative bg-[#1a1a2e]/95 backdrop-blur-xl border border-white/10 rounded-2xl p-6 max-w-sm w-full shadow-2xl">
+            <div className="flex flex-col items-center text-center gap-4">
+              <div className="w-12 h-12 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center">
+                <Trash2 className="w-6 h-6 text-red-400" />
+              </div>
+              <div>
+                <p className="text-white font-semibold text-lg">Delete Batch?</p>
+                <p className="text-sm text-gray-400 mt-1">
+                  This will permanently delete this batch. This action cannot be undone.
+                </p>
+              </div>
+              <div className="flex items-center gap-3 w-full mt-2">
+                <button
+                  onClick={() => setDeletingBatchId(null)}
+                  disabled={isDeleting}
+                  className="flex-1 px-4 py-2.5 rounded-xl text-sm font-medium text-gray-400 bg-white/[0.04] border border-white/10 hover:bg-white/[0.08] hover:text-gray-200 transition-all duration-200 active:scale-95"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => handleDeleteBatch(deletingBatchId)}
+                  disabled={isDeleting}
+                  className="flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold text-white bg-red-600 hover:bg-red-500 border border-red-500/30 shadow-lg shadow-red-500/20 transition-all duration-200 active:scale-95 disabled:opacity-60"
+                >
+                  {isDeleting ? 'Deleting…' : 'Delete'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

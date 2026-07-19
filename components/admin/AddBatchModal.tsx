@@ -4,7 +4,8 @@ import React, { useState, useEffect } from 'react';
 import { Modal } from '@/components/ui/Modal';
 import { createClient } from '@/lib/supabase/client';
 import type { Database } from '@/types/database.types';
-import { Clock, Calendar, AlertCircle, Loader2 } from 'lucide-react';
+import { Calendar, AlertCircle, Loader2 } from 'lucide-react';
+import { TimePicker } from '@/components/ui/TimePicker';
 
 type Branch = Database['public']['Tables']['branches']['Row'];
 
@@ -146,34 +147,12 @@ export function AddBatchModal({ isOpen, onClose, onSuccess, branch }: AddBatchMo
         {/* Time Row */}
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className={glassLabelClass}>
-              <span className="inline-flex items-center gap-1.5">
-                <Clock className="w-3 h-3" />
-                Start Time
-              </span>
-            </label>
-            <input
-              type="time"
-              value={startTime}
-              onChange={(e) => setStartTime(e.target.value)}
-              required
-              className={glassInputClass + ' [color-scheme:dark]'}
-            />
+            <label className={glassLabelClass}>Start Time</label>
+            <TimePicker value={startTime} onChange={setStartTime} />
           </div>
           <div>
-            <label className={glassLabelClass}>
-              <span className="inline-flex items-center gap-1.5">
-                <Clock className="w-3 h-3" />
-                End Time
-              </span>
-            </label>
-            <input
-              type="time"
-              value={endTime}
-              onChange={(e) => setEndTime(e.target.value)}
-              required
-              className={glassInputClass + ' [color-scheme:dark]'}
-            />
+            <label className={glassLabelClass}>End Time</label>
+            <TimePicker value={endTime} onChange={setEndTime} />
           </div>
         </div>
 
