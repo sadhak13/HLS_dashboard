@@ -1,11 +1,12 @@
 "use client";
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { StatCard } from '@/components/ui/StatCard';
 import { GlassCard } from '@/components/ui/GlassCard';
-import { Users, MapPin, IndianRupee, Activity } from 'lucide-react';
+import { PeriodPicker, PeriodRange, getDefaultPeriod } from '@/components/admin/PeriodPicker';
+import { Users, MapPin, IndianRupee, Activity, UserPlus, AlertCircle, TrendingUp } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
-import { formatDistanceToNow, parseISO } from 'date-fns';
+import { formatDistanceToNow, parseISO, format, eachMonthOfInterval } from 'date-fns';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 type ActivityItem = {
@@ -22,114 +23,175 @@ type ChartData = {
 };
 
 interface DashboardClientProps {
-  initialPlayersCount: number;
-  initialBranchesCount: number;
-  initialRevenue: number;
-  initialAttendancePct: number;
-  initialActivities: ActivityItem[];
-  initialChartData: ChartData[];
   branchesMap: Record<string, string>;
+  initialBranchesCount: number;
 }
 
-export function DashboardClient({
-  initialPlayersCount,
-  initialBranchesCount,
-  initialRevenue,
-  initialAttendancePct,
-  initialActivities,
-  initialChartData,
-  branchesMap,
-}: DashboardClientProps) {
-  const [playersCount, setPlayersCount] = useState(initialPlayersCount);
+export function DashboardClient({ branchesMap, initialBranchesCount }: DashboardClientProps) {
+  const [period, setPeriod] = useState<PeriodRange>(getDefaultPeriod);
+  const [playersCount, setPlayersCount] = useState(0);
   const [branchesCount, setBranchesCount] = useState(initialBranchesCount);
-  const [revenue, setRevenue] = useState(initialRevenue);
-  const [attendancePct, setAttendancePct] = useState(initialAttendancePct);
-  const [activities, setActivities] = useState(initialActivities);
-  const [chartData, setChartData] = useState(initialChartData);
+  const [revenue, setRevenue] = useState(0);
+  const [attendancePct, setAttendancePct] = useState(0);
+  const [newEnrollments, setNewEnrollments] = useState(0);
+  const [pendingDues, setPendingDues] = useState(0);
+  const [collectionRate, setCollectionRate] = useState(0);
+  const [activities, setActivities] = useState<ActivityItem[]>([]);
+  const [chartData, setChartData] = useState<ChartData[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
   const supabase = createClient();
 
+  const fetchDashboardData = useCallback(async (p: PeriodRange) => {
+    setIsLoading(true);
+
+    const fromDate = p.from;
+    const toDate = p.to;
+
+    // Generate month keys for the chart based on the period range
+    const months = eachMonthOfInterval({
+      start: parseISO(fromDate),
+      end: parseISO(toDate),
+    });
+    const monthKeys = months.map(m => format(m, 'yyyy-MM'));
+    const monthLabels = months.map(m => format(m, 'MMM'));
+
+    const [
+      { count: activePlayers },
+      { data: paidFees },
+      { data: pendingFees },
+      { count: presentCount },
+      { count: totalAttendance },
+      { data: enrolledPlayers },
+      { data: recentPlayers },
+      { data: recentFees },
+    ] = await Promise.all([
+      supabase.from('players').select('*', { count: 'exact', head: true }).eq('status', 'active'),
+      (supabase as any).from('fees').select('amount, month').eq('status', 'paid').gte('paid_date', fromDate).lte('paid_date', toDate + 'T23:59:59'),
+      (supabase as any).from('fees').select('amount').in('status', ['pending', 'overdue']).gte('created_at', fromDate).lte('created_at', toDate + 'T23:59:59'),
+      (supabase as any).from('attendance').select('*', { count: 'exact', head: true }).eq('status', 'present').gte('date', fromDate).lte('date', toDate),
+      (supabase as any).from('attendance').select('*', { count: 'exact', head: true }).gte('date', fromDate).lte('date', toDate),
+      supabase.from('players').select('id').gte('enrolled_date', fromDate).lte('enrolled_date', toDate),
+      supabase.from('players').select('id, full_name, branch_id, created_at').order('created_at', { ascending: false }).limit(5),
+      (supabase as any).from('fees').select('id, amount, branch_id, created_at').eq('status', 'paid').order('created_at', { ascending: false }).limit(5),
+    ]);
+
+    // Active players (always current count)
+    setPlayersCount(activePlayers || 0);
+
+    // Revenue for the selected period
+    const totalRevenue = (paidFees ?? []).reduce((sum: number, f: any) => sum + f.amount, 0);
+    setRevenue(totalRevenue);
+
+    // Pending dues
+    const totalPending = (pendingFees ?? []).reduce((sum: number, f: any) => sum + f.amount, 0);
+    setPendingDues(totalPending);
+
+    // Collection rate
+    const totalBilled = totalRevenue + totalPending;
+    setCollectionRate(totalBilled > 0 ? (totalRevenue / totalBilled) * 100 : 0);
+
+    // Attendance percentage
+    setAttendancePct(totalAttendance ? ((presentCount || 0) / totalAttendance) * 100 : 0);
+
+    // New enrollments
+    setNewEnrollments(enrolledPlayers?.length || 0);
+
+    // Chart data: revenue per month within the range
+    const revenueByMonth: Record<string, number> = {};
+    monthKeys.forEach(mk => { revenueByMonth[mk] = 0; });
+    (paidFees ?? []).forEach((f: any) => {
+      if (f.month && revenueByMonth[f.month] !== undefined) {
+        revenueByMonth[f.month] += f.amount;
+      }
+    });
+    const chartResult: ChartData[] = monthKeys.map((mk, i) => ({
+      name: monthLabels[i],
+      revenue: revenueByMonth[mk] || 0,
+    }));
+    setChartData(chartResult);
+
+    // Activities
+    const acts: ActivityItem[] = [];
+    if (recentPlayers) {
+      acts.push(...recentPlayers.map((p: any) => ({
+        id: `player-${p.id}`,
+        type: 'player' as const,
+        title: `${p.full_name} joined ${branchesMap[p.branch_id] || 'Unknown Branch'}`,
+        subtitle: branchesMap[p.branch_id] || 'Unknown Branch',
+        created_at: p.created_at,
+      })));
+    }
+    if (recentFees) {
+      acts.push(...recentFees.map((f: any) => ({
+        id: `fee-${f.id}`,
+        type: 'fee' as const,
+        title: `Fee Collected - ₹${f.amount}`,
+        subtitle: branchesMap[f.branch_id] || 'Unknown Branch',
+        created_at: f.created_at,
+      })));
+    }
+    acts.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    setActivities(acts.slice(0, 10));
+
+    setIsLoading(false);
+  }, [branchesMap]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
-    // Subscribe to changes in players
+    fetchDashboardData(period);
+  }, [period, fetchDashboardData]);
+
+  // Realtime subscriptions for live updates
+  useEffect(() => {
     const playersSub = supabase
       .channel('players-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'players' }, async (payload) => {
-        if (payload.eventType === 'INSERT') {
-          const newPlayer = payload.new;
-          const branchName = branchesMap[newPlayer.branch_id] || 'Unknown Branch';
-          
-          // Fetch current strength of that branch
-          const { count } = await supabase
-            .from('players')
-            .select('*', { count: 'exact', head: true })
-            .eq('branch_id', newPlayer.branch_id)
-            .eq('status', 'active');
-            
-          const strength = count || 0;
-
-          const newActivity: ActivityItem = {
-            id: `player-${newPlayer.id}`,
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'players' }, (payload) => {
+        if (payload.eventType === 'INSERT' && payload.new.status === 'active') {
+          setPlayersCount(prev => prev + 1);
+          setNewEnrollments(prev => prev + 1);
+          const branchName = branchesMap[payload.new.branch_id] || 'Unknown Branch';
+          const newPlayerActivity: ActivityItem = {
+            id: `player-${payload.new.id}`,
             type: 'player',
-            title: `${newPlayer.full_name} has joined ${branchName} and now the total strength is ${strength}`,
-            subtitle: `${branchName} • Just now`,
-            created_at: newPlayer.created_at,
+            title: `${payload.new.full_name} joined ${branchName}`,
+            subtitle: branchName,
+            created_at: payload.new.created_at,
           };
-
-          setActivities((prev) => [newActivity, ...prev].slice(0, 10));
-          if (newPlayer.status === 'active') {
-             setPlayersCount((prev) => prev + 1);
-          }
-        } else if (payload.eventType === 'DELETE') {
-          setPlayersCount((prev) => Math.max(0, prev - 1));
+          setActivities(prev => [newPlayerActivity, ...prev].slice(0, 10));
         } else if (payload.eventType === 'UPDATE') {
           if (payload.old.status !== 'active' && payload.new.status === 'active') {
-            setPlayersCount((prev) => prev + 1);
+            setPlayersCount(prev => prev + 1);
           } else if (payload.old.status === 'active' && payload.new.status !== 'active') {
-            setPlayersCount((prev) => Math.max(0, prev - 1));
+            setPlayersCount(prev => Math.max(0, prev - 1));
           }
+        } else if (payload.eventType === 'DELETE') {
+          setPlayersCount(prev => Math.max(0, prev - 1));
         }
       })
       .subscribe();
 
-    // Subscribe to changes in fees
     const feesSub = supabase
       .channel('fees-changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'fees' }, (payload) => {
         if (payload.eventType === 'INSERT' && payload.new.status === 'paid') {
-          const newFee = payload.new;
-          const branchName = branchesMap[newFee.branch_id] || 'Unknown Branch';
-          
-          const newActivity: ActivityItem = {
-            id: `fee-${newFee.id}`,
+          const branchName = branchesMap[payload.new.branch_id] || 'Unknown Branch';
+          setRevenue(prev => prev + payload.new.amount);
+          const newFeeActivity: ActivityItem = {
+            id: `fee-${payload.new.id}`,
             type: 'fee',
-            title: `Fee Collected - ₹${newFee.amount}`,
-            subtitle: `${branchName} • Just now`,
-            created_at: newFee.created_at,
+            title: `Fee Collected - ₹${payload.new.amount}`,
+            subtitle: branchName,
+            created_at: payload.new.created_at,
           };
-
-          setActivities((prev) => [newActivity, ...prev].slice(0, 10));
-          setRevenue((prev) => prev + newFee.amount);
-          
-          // Optimistically update chart data for current month
-          const currentMonth = new Date().toISOString().slice(0, 7); // YYYY-MM
-          if (newFee.month === currentMonth) {
-             setChartData((prev) => {
-               const newData = [...prev];
-               const lastIdx = newData.length - 1;
-               if (lastIdx >= 0) {
-                 newData[lastIdx] = { ...newData[lastIdx], revenue: newData[lastIdx].revenue + newFee.amount };
-               }
-               return newData;
-             });
-          }
+          setActivities(prev => [newFeeActivity, ...prev].slice(0, 10));
         }
       })
       .subscribe();
 
-    // Subscribe to changes in branches
     const branchesSub = supabase
       .channel('branches-changes')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'branches' }, () => {
-        setBranchesCount((prev) => prev + 1);
+        setBranchesCount(prev => prev + 1);
       })
       .subscribe();
 
@@ -141,88 +203,123 @@ export function DashboardClient({
   }, [branchesMap]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div className="space-y-8">
-      {/* Header */}
-      <div className="space-y-2">
-        <h1 className="text-4xl font-bold text-white">Academy Overview</h1>
-        <p className="text-base text-gray-400">Welcome back, here's what's happening today.</p>
+    <div className="space-y-6 md:space-y-8">
+      {/* Header with Period Picker */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="space-y-1">
+          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-white">Academy Overview</h1>
+          <p className="text-sm sm:text-base text-gray-400">Welcome back, here&apos;s what&apos;s happening.</p>
+        </div>
+        <PeriodPicker value={period} onChange={setPeriod} />
       </div>
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
-        <StatCard
-          title="Total Active Players"
-          value={playersCount}
-          icon={Users}
-          iconColor="text-green-500"
-        />
-        <StatCard
-          title="Total Branches"
-          value={branchesCount}
-          icon={MapPin}
-          iconColor="text-blue-500"
-        />
-        <StatCard
-          title="Revenue (This Month)"
-          value={`₹${revenue.toLocaleString('en-IN')}`}
-          icon={IndianRupee}
-          iconColor="text-emerald-500"
-        />
-        <StatCard
-          title="Avg. Attendance"
-          value={`${attendancePct.toFixed(1)}%`}
-          icon={Activity}
-          iconColor="text-purple-500"
-        />
+      {/* Loading overlay for stats */}
+      <div className={`transition-opacity duration-300 ${isLoading ? 'opacity-50' : 'opacity-100'}`}>
+        {/* Primary Stats Grid */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 lg:gap-6">
+          <StatCard
+            title="Total Active Players"
+            value={playersCount}
+            icon={Users}
+            iconColor="text-green-500"
+          />
+          <StatCard
+            title="Total Branches"
+            value={branchesCount}
+            icon={MapPin}
+            iconColor="text-blue-500"
+          />
+          <StatCard
+            title="Revenue"
+            value={`₹${revenue.toLocaleString('en-IN')}`}
+            icon={IndianRupee}
+            iconColor="text-emerald-500"
+          />
+          <StatCard
+            title="Avg. Attendance"
+            value={`${attendancePct.toFixed(1)}%`}
+            icon={Activity}
+            iconColor="text-purple-500"
+          />
+        </div>
+
+        {/* Secondary Stats Grid */}
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4 lg:gap-6 mt-3 md:mt-4 lg:mt-6">
+          <StatCard
+            title="New Enrollments"
+            value={newEnrollments}
+            icon={UserPlus}
+            iconColor="text-cyan-500"
+          />
+          <StatCard
+            title="Pending Dues"
+            value={`₹${pendingDues.toLocaleString('en-IN')}`}
+            icon={AlertCircle}
+            iconColor="text-amber-500"
+          />
+          <StatCard
+            title="Collection Rate"
+            value={`${collectionRate.toFixed(1)}%`}
+            icon={TrendingUp}
+            iconColor="text-teal-500"
+            className="col-span-2 lg:col-span-1"
+          />
+        </div>
       </div>
 
       {/* Charts and Activity */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
         {/* Revenue Chart */}
         <div className="lg:col-span-2">
           <GlassCard title="Revenue Overview" className="h-full">
-            <div className="h-80 w-full -mx-2">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chartData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.1)" />
-                  <XAxis
-                    dataKey="name"
-                    axisLine={false}
-                    tickLine={false}
-                    tick={{ fontSize: 12, fill: '#9ca3af' }}
-                    dy={10}
-                  />
-                  <YAxis
-                    axisLine={false}
-                    tickLine={false}
-                    tick={{ fontSize: 12, fill: '#9ca3af' }}
-                    tickFormatter={(val) => `₹${val}`}
-                  />
-                  <Tooltip
-                    cursor={{ fill: 'rgba(255,255,255,0.05)' }}
-                    contentStyle={{
-                      borderRadius: '12px',
-                      border: '1px solid rgba(255,255,255,0.1)',
-                      backgroundColor: 'rgba(15, 23, 42, 0.9)',
-                      backdropFilter: 'blur(12px)',
-                      color: '#fff'
-                    }}
-                    formatter={(value: any) => [`₹${Number(value || 0).toLocaleString('en-IN')}`, 'Revenue']}
-                  />
-                  <Bar
-                    dataKey="revenue"
-                    fill="url(#greenGradient)"
-                    radius={[8, 8, 0, 0]}
-                    barSize={50}
-                  />
-                  <defs>
-                    <linearGradient id="greenGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#10b981" stopOpacity={0.8} />
-                      <stop offset="100%" stopColor="#059669" stopOpacity={0.6} />
-                    </linearGradient>
-                  </defs>
-                </BarChart>
-              </ResponsiveContainer>
+            <div className="h-64 sm:h-72 md:h-80 w-full -mx-2">
+              {chartData.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={chartData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.1)" />
+                    <XAxis
+                      dataKey="name"
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fontSize: 12, fill: '#9ca3af' }}
+                      dy={10}
+                    />
+                    <YAxis
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fontSize: 12, fill: '#9ca3af' }}
+                      tickFormatter={(val) => `₹${val >= 1000 ? `${(val / 1000).toFixed(0)}k` : val}`}
+                    />
+                    <Tooltip
+                      cursor={{ fill: 'rgba(255,255,255,0.05)' }}
+                      contentStyle={{
+                        borderRadius: '12px',
+                        border: '1px solid rgba(255,255,255,0.1)',
+                        backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                        backdropFilter: 'blur(12px)',
+                        color: '#fff',
+                      }}
+                      formatter={(value: any) => [`₹${Number(value || 0).toLocaleString('en-IN')}`, 'Revenue']}
+                    />
+                    <Bar
+                      dataKey="revenue"
+                      fill="url(#greenGradient)"
+                      radius={[8, 8, 0, 0]}
+                      barSize={50}
+                    />
+                    <defs>
+                      <linearGradient id="greenGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#10b981" stopOpacity={0.8} />
+                        <stop offset="100%" stopColor="#059669" stopOpacity={0.6} />
+                      </linearGradient>
+                    </defs>
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="flex items-center justify-center h-full text-gray-500 text-sm">
+                  No revenue data for this period.
+                </div>
+              )}
             </div>
           </GlassCard>
         </div>
@@ -230,23 +327,23 @@ export function DashboardClient({
         {/* Recent Activity */}
         <div>
           <GlassCard title="Recent Activity" className="h-full">
-            <div className="max-h-80 overflow-y-auto scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+            <div className="max-h-72 sm:max-h-80 overflow-y-auto scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
               {activities.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-8 text-center">
                   <Activity className="w-12 h-12 text-gray-600 mb-3" />
                   <p className="text-sm text-gray-500">No recent activity.</p>
                 </div>
               ) : (
-                <ul className="space-y-4">
+                <ul className="space-y-3">
                   {activities.map((activity) => (
-                    <li key={activity.id} className="flex items-start gap-3 p-3 rounded-xl hover:bg-white/5 transition-colors">
+                    <li key={activity.id} className="flex items-start gap-3 p-2.5 sm:p-3 rounded-xl hover:bg-white/5 transition-colors">
                       <div className={`w-2 h-2 mt-2 rounded-full flex-shrink-0 ${
                         activity.type === 'fee' ? 'bg-green-500 shadow-lg shadow-green-500/50' : 'bg-blue-500 shadow-lg shadow-blue-500/50'
-                      }`}></div>
+                      }`} />
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-white leading-snug">{activity.title}</p>
-                        <p className="text-xs text-gray-400 mt-1">
-                          {activity.subtitle.split(' • ')[0]} • {formatDistanceToNow(parseISO(activity.created_at), { addSuffix: true })}
+                        <p className="text-xs sm:text-sm font-medium text-white leading-snug">{activity.title}</p>
+                        <p className="text-[11px] sm:text-xs text-gray-400 mt-1">
+                          {activity.subtitle} &bull; {formatDistanceToNow(parseISO(activity.created_at), { addSuffix: true })}
                         </p>
                       </div>
                     </li>
