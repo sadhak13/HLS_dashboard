@@ -7,6 +7,23 @@ import type { Database } from '@/types/database.types'
 type ProfileInsert = Database['public']['Tables']['profiles']['Insert']
 type CoachInsert = Database['public']['Tables']['coaches']['Insert']
 
+export async function resetCoachPassword(userId: string) {
+  const adminClient = createAdminClient()
+
+  const newPassword = 'Welcome123!'
+
+  const { error } = await adminClient.auth.admin.updateUserById(userId, {
+    password: newPassword,
+    user_metadata: { must_change_password: true },
+  })
+
+  if (error) {
+    return { error: error.message }
+  }
+
+  return { success: true, password: newPassword }
+}
+
 export async function createCoachAccount(formData: FormData) {
   const email = formData.get('email') as string
   const fullName = formData.get('fullName') as string
