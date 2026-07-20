@@ -7,7 +7,7 @@ import { PeriodPicker, PeriodRange, getDefaultPeriod } from '@/components/admin/
 import { Users, MapPin, IndianRupee, Activity, UserPlus, AlertCircle, TrendingUp } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { formatDistanceToNow, parseISO, format, eachMonthOfInterval } from 'date-fns';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 
 type ActivityItem = {
   id: string;
@@ -21,6 +21,12 @@ type ChartData = {
   name: string;
   revenue: number;
 };
+
+const PIE_COLORS = [
+  '#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#ec4899',
+  '#06b6d4', '#ef4444', '#84cc16', '#f97316', '#6366f1',
+  '#14b8a6', '#e11d48',
+];
 
 interface DashboardClientProps {
   branchesMap: Record<string, string>;
@@ -38,6 +44,7 @@ export function DashboardClient({ branchesMap, initialBranchesCount }: Dashboard
   const [collectionRate, setCollectionRate] = useState(0);
   const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [chartData, setChartData] = useState<ChartData[]>([]);
+  const [branchDistribution, setBranchDistribution] = useState<{ name: string; value: number }[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const supabase = createClient();
@@ -65,6 +72,7 @@ export function DashboardClient({ branchesMap, initialBranchesCount }: Dashboard
       { data: enrolledPlayers },
       { data: recentPlayers },
       { data: recentFees },
+      { data: playersByBranch },
     ] = await Promise.all([
       supabase.from('players').select('*', { count: 'exact', head: true }).eq('status', 'active'),
       (supabase as any).from('fees').select('amount, month').eq('status', 'paid').gte('paid_date', fromDate).lte('paid_date', toDate + 'T23:59:59'),
@@ -74,6 +82,7 @@ export function DashboardClient({ branchesMap, initialBranchesCount }: Dashboard
       supabase.from('players').select('id').gte('enrolled_date', fromDate).lte('enrolled_date', toDate),
       supabase.from('players').select('id, full_name, branch_id, created_at').order('created_at', { ascending: false }).limit(5),
       (supabase as any).from('fees').select('id, amount, branch_id, created_at').eq('status', 'paid').order('created_at', { ascending: false }).limit(5),
+      supabase.from('players').select('branch_id').eq('status', 'active'),
     ]);
 
     // Active players (always current count)
@@ -110,6 +119,19 @@ export function DashboardClient({ branchesMap, initialBranchesCount }: Dashboard
       revenue: revenueByMonth[mk] || 0,
     }));
     setChartData(chartResult);
+
+    // Branch-wise player distribution
+    const branchCounts: Record<string, number> = {};
+    (playersByBranch ?? []).forEach((p: any) => {
+      branchCounts[p.branch_id] = (branchCounts[p.branch_id] || 0) + 1;
+    });
+    const distribution = Object.entries(branchCounts)
+      .map(([branchId, count]) => ({
+        name: branchesMap[branchId] || 'Unknown',
+        value: count,
+      }))
+      .sort((a, b) => b.value - a.value);
+    setBranchDistribution(distribution);
 
     // Activities
     const acts: ActivityItem[] = [];
@@ -353,6 +375,105 @@ export function DashboardClient({ branchesMap, initialBranchesCount }: Dashboard
             </div>
           </GlassCard>
         </div>
+      </div>
+
+      {/* Branch Distribution Pie Chart */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
+        <GlassCard title="Student Distribution by Branch">
+          <div className="h-64 sm:h-72 md:h-80 w-full">
+            {branchDistribution.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={branchDistribution}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius="40%"
+                    outerRadius="70%"
+                    paddingAngle={2}
+                    dataKey="value"
+                    nameKey="name"
+                    label={({ name, percent }) => `${name} (${((percent ?? 0) * 100).toFixed(0)}%)`}
+                    labelLine={{ stroke: 'rgba(255,255,255,0.3)' }}
+                  >
+                    {branchDistribution.map((_, index) => (
+                      <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    contentStyle={{
+                      borderRadius: '12px',
+                      border: '1px solid rgba(255,255,255,0.1)',
+                      backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                      backdropFilter: 'blur(12px)',
+                      color: '#fff',
+                    }}
+                    formatter={(value: any, name: any) => [`${value} students`, name]}
+                  />
+                  <Legend
+                    verticalAlign="bottom"
+                    height={36}
+                    formatter={(value) => <span className="text-xs text-gray-300">{value}</span>}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex items-center justify-center h-full text-gray-500 text-sm">
+                No student data available.
+              </div>
+            )}
+          </div>
+        </GlassCard>
+
+        {/* Branch-wise breakdown table */}
+        <GlassCard title="Branch Breakdown">
+          <div className="max-h-72 sm:max-h-80 overflow-y-auto scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+            {branchDistribution.length > 0 ? (
+              <div className="space-y-2">
+                {branchDistribution.map((branch, i) => {
+                  const total = branchDistribution.reduce((s, b) => s + b.value, 0);
+                  const pct = total > 0 ? (branch.value / total) * 100 : 0;
+                  return (
+                    <div key={branch.name} className="flex items-center gap-3 p-3 rounded-xl hover:bg-white/5 transition-colors">
+                      <div
+                        className="w-3 h-3 rounded-full shrink-0"
+                        style={{ backgroundColor: PIE_COLORS[i % PIE_COLORS.length] }}
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between">
+                          <p className="text-sm font-medium text-white truncate">{branch.name}</p>
+                          <div className="flex items-center gap-2 shrink-0 ml-2">
+                            <span className="text-xs text-gray-400">{branch.value} students</span>
+                            <span className="text-xs font-semibold text-green-400">{pct.toFixed(1)}%</span>
+                          </div>
+                        </div>
+                        <div className="mt-1.5 h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
+                          <div
+                            className="h-full rounded-full transition-all duration-500"
+                            style={{
+                              width: `${pct}%`,
+                              backgroundColor: PIE_COLORS[i % PIE_COLORS.length],
+                            }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+                <div className="pt-2 mt-2 border-t border-white/[0.07] flex items-center justify-between px-3">
+                  <span className="text-xs font-medium text-gray-400">Total</span>
+                  <span className="text-sm font-bold text-white">
+                    {branchDistribution.reduce((s, b) => s + b.value, 0)} students
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center justify-center h-full py-8 text-gray-500 text-sm">
+                No student data available.
+              </div>
+            )}
+          </div>
+        </GlassCard>
       </div>
     </div>
   );
