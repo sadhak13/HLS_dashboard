@@ -2,25 +2,13 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
+import { playerSchema, parseFormData } from '@/lib/validations'
 
 export async function createAdminPlayer(formData: FormData) {
-  const fullName = formData.get('fullName') as string
-  const dob = formData.get('dob') as string
-  const gender = formData.get('gender') as string || 'male'
-  const parentName = formData.get('parentName') as string
-  const parentPhone = formData.get('parentPhone') as string
-  const branchId = formData.get('branchId') as string
-  const batchId = formData.get('batchId') as string
-  const status = formData.get('status') as string || 'active'
-  const enrolledDate = formData.get('enrolledDate') as string || new Date().toISOString().split('T')[0]
-  const aadharNumber = formData.get('aadharNumber') as string
+  const parsed = parseFormData(playerSchema, formData)
+  if ('error' in parsed) return parsed
 
-  const cleanFullName = fullName?.trim().replace(/\s+/g, ' ')
-  const cleanParentPhone = parentPhone?.trim()
-
-  if (!cleanFullName) return { error: 'Full name is required' }
-  if (!cleanParentPhone) return { error: 'Parent phone is required' }
-  if (!branchId) return { error: 'Branch is required' }
+  const { fullName: cleanFullName, parentPhone: cleanParentPhone, branchId, batchId, dob, gender, parentName, status, enrolledDate, aadharNumber } = parsed
 
   const supabase = createAdminClient()
 
@@ -50,7 +38,7 @@ export async function createAdminPlayer(formData: FormData) {
       insertData.batch_id = batchId
     }
     if (aadharNumber && aadharNumber.length === 12) {
-      insertData.aadhar_number = aadharNumber
+      insertData.aadhar_number = `XXXX-XXXX-${aadharNumber.slice(-4)}`
     }
 
     const { data: newPlayer, error: insertError } = await (supabase as any)
@@ -81,22 +69,10 @@ export async function createAdminPlayer(formData: FormData) {
 }
 
 export async function updateAdminPlayer(playerId: string, formData: FormData) {
-  const fullName = formData.get('fullName') as string
-  const dob = formData.get('dob') as string
-  const gender = formData.get('gender') as string || 'male'
-  const parentName = formData.get('parentName') as string
-  const parentPhone = formData.get('parentPhone') as string
-  const branchId = formData.get('branchId') as string
-  const batchId = formData.get('batchId') as string
-  const status = formData.get('status') as string
-  const aadharNumber = formData.get('aadharNumber') as string
+  const parsed = parseFormData(playerSchema, formData)
+  if ('error' in parsed) return parsed
 
-  const cleanFullName = fullName?.trim().replace(/\s+/g, ' ')
-  const cleanParentPhone = parentPhone?.trim()
-
-  if (!cleanFullName) return { error: 'Full name is required' }
-  if (!cleanParentPhone) return { error: 'Parent phone is required' }
-  if (!branchId) return { error: 'Branch is required' }
+  const { fullName: cleanFullName, parentPhone: cleanParentPhone, branchId, batchId, dob, gender, parentName, status, aadharNumber } = parsed
 
   const supabase = createAdminClient()
 
@@ -122,7 +98,7 @@ export async function updateAdminPlayer(playerId: string, formData: FormData) {
       parent_name: parentName?.trim(),
       parent_phone: cleanParentPhone,
       status: status,
-      aadhar_number: (aadharNumber && aadharNumber.length === 12) ? aadharNumber : null,
+      aadhar_number: (aadharNumber && aadharNumber.length === 12) ? `XXXX-XXXX-${aadharNumber.slice(-4)}` : null,
     }
 
     const { error: updateError } = await (supabase as any)

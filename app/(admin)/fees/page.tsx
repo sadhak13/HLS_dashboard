@@ -7,6 +7,7 @@ import { EditFeeModal, FeeRecord } from '@/components/admin/EditFeeModal';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Button } from '@/components/ui/Button';
 import { Pagination } from '@/components/ui/Pagination';
+import { useToast } from '@/components/ui/Toast';
 import { IndianRupee, Plus, TrendingUp, Clock, AlertCircle, Zap, ChevronLeft, ChevronRight } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { generateNextMonthFeesForAllBranches } from '@/app/(admin)/fees/actions';
@@ -27,6 +28,7 @@ function StatCard({ label, value, icon, color }: { label: string; value: string;
 }
 
 export default function FeesPage() {
+  const { showToast } = useToast();
   // Month Selection State
   const [currentMonthDate, setCurrentMonthDate] = useState(() => startOfMonth(new Date()));
   const maxMonth = useMemo(() => startOfMonth(addMonths(new Date(), 1)), []);
@@ -34,6 +36,7 @@ export default function FeesPage() {
   const selectedMonthDisplay = format(currentMonthDate, 'MMMM yyyy');
 
   const [fees, setFees] = useState<FeeRecord[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [filterStatus, setFilterStatus] = useState<'all' | 'paid' | 'pending' | 'overdue'>('all');
@@ -44,29 +47,56 @@ export default function FeesPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 20;
 
+  // Stats are fetched separately to avoid coupling with pagination
+  const [stats, setStats] = useState({ collected: 0, pending: 0, overdue: 0 });
+
   const supabase = createClient();
 
-  const fetchFees = useCallback(async () => {
+  const fetchFees = useCallback(async (page: number, status: string) => {
     setIsLoading(true);
-    const { data, error } = await supabase
-      .from('fees')
-      .select(`
-        *,
-        players (full_name, branch_id),
-        branches (name)
-      `)
-      .eq('month', selectedMonthStr)
-      .order('created_at', { ascending: false });
+    const from = (page - 1) * ITEMS_PER_PAGE;
+    const to = from + ITEMS_PER_PAGE - 1;
 
-    if (data && !error) {
+    let query = supabase
+      .from('fees')
+      .select('*, players (full_name, branch_id), branches (name)', { count: 'exact' })
+      .eq('month', selectedMonthStr)
+      .order('created_at', { ascending: false })
+      .range(from, to);
+
+    if (status !== 'all') {
+      query = query.eq('status', status);
+    }
+
+    const { data, error, count } = await query;
+
+    if (error) {
+      showToast('Failed to load fee records.');
+    } else if (data) {
       setFees(data as FeeRecord[]);
+      setTotalCount(count ?? 0);
     }
     setIsLoading(false);
   }, [selectedMonthStr]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const fetchStats = useCallback(async () => {
+    const { data } = await supabase
+      .from('fees')
+      .select('status, amount')
+      .eq('month', selectedMonthStr) as { data: { status: string; amount: number }[] | null };
+
+    if (data) {
+      const collected = data.filter(f => f.status === 'paid').reduce((s, f) => s + f.amount, 0);
+      const pending = data.filter(f => f.status === 'pending').reduce((s, f) => s + f.amount, 0);
+      const overdue = data.filter(f => f.status === 'overdue').reduce((s, f) => s + f.amount, 0);
+      setStats({ collected, pending, overdue });
+    }
+  }, [selectedMonthStr]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
-    fetchFees();
-  }, [fetchFees]);
+    fetchFees(currentPage, filterStatus);
+    fetchStats();
+  }, [fetchFees, fetchStats, currentPage, filterStatus]);
 
   const handleMarkPaid = async (feeId: string) => {
     const { error } = await (supabase as any)
@@ -78,7 +108,8 @@ export default function FeesPage() {
       .eq('id', feeId);
 
     if (!error) {
-      fetchFees();
+      fetchFees(currentPage, filterStatus);
+      fetchStats();
     }
   };
 
@@ -96,7 +127,8 @@ export default function FeesPage() {
       setGenerateMessage(`✓ Successfully created fees for ${result.createdCount} players in ${selectedMonthDisplay}`);
       setTimeout(() => {
         setGenerateMessage('');
-        fetchFees();
+        fetchFees(currentPage, filterStatus);
+        fetchStats();
       }, 2000);
     }
 
@@ -120,22 +152,11 @@ export default function FeesPage() {
   const canGenerate = selectedMonthStr >= currentSystemMonthStr;
   const isNextDisabled = isAfter(addMonths(currentMonthDate, 1), maxMonth);
 
-  // Summary stats
-  const totalCollected = fees.filter((f) => f.status === 'paid').reduce((sum, f) => sum + f.amount, 0);
-  const totalPending = fees.filter((f) => f.status === 'pending').reduce((sum, f) => sum + f.amount, 0);
-  const totalOverdue = fees.filter((f) => f.status === 'overdue').reduce((sum, f) => sum + f.amount, 0);
-
-  const filteredFees = filterStatus === 'all' ? fees : fees.filter((f) => f.status === filterStatus);
-
-  const totalPages = Math.ceil(filteredFees.length / ITEMS_PER_PAGE);
-  const paginatedFees = filteredFees.slice(
-    (currentPage - 1) * ITEMS_PER_PAGE,
-    currentPage * ITEMS_PER_PAGE
-  );
+  const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
 
   const handleFilterChange = (s: 'all' | 'paid' | 'pending' | 'overdue') => {
     setFilterStatus(s);
-    setCurrentPage(1); // reset page when filter changes
+    setCurrentPage(1);
   };
 
   return (
@@ -189,19 +210,19 @@ export default function FeesPage() {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <StatCard
           label="Total Collected"
-          value={`₹${totalCollected.toLocaleString('en-IN')}`}
+          value={`₹${stats.collected.toLocaleString('en-IN')}`}
           icon={<TrendingUp className="w-5 h-5 text-green-600" />}
           color="bg-green-100 dark:bg-green-900/30"
         />
         <StatCard
           label="Pending"
-          value={`₹${totalPending.toLocaleString('en-IN')}`}
+          value={`₹${stats.pending.toLocaleString('en-IN')}`}
           icon={<Clock className="w-5 h-5 text-amber-600" />}
           color="bg-amber-100 dark:bg-amber-900/30"
         />
         <StatCard
           label="Overdue"
-          value={`₹${totalOverdue.toLocaleString('en-IN')}`}
+          value={`₹${stats.overdue.toLocaleString('en-IN')}`}
           icon={<AlertCircle className="w-5 h-5 text-red-600" />}
           color="bg-red-100 dark:bg-red-900/30"
         />
@@ -227,7 +248,7 @@ export default function FeesPage() {
       )}
 
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
-        {fees.length === 0 && !isLoading ? (
+        {totalCount === 0 && !isLoading ? (
           <div className="p-8">
             <EmptyState
               icon={<IndianRupee className="w-6 h-6" />}
@@ -250,7 +271,7 @@ export default function FeesPage() {
           </div>
         ) : (
           <FeeTable
-            fees={paginatedFees}
+            fees={fees}
             isLoading={isLoading}
             onMarkPaid={handleMarkPaid}
             onEdit={(fee) => {
@@ -259,12 +280,12 @@ export default function FeesPage() {
             }}
           />
         )}
-        {filteredFees.length > 0 && !isLoading && (
+        {totalCount > 0 && !isLoading && (
           <Pagination
             currentPage={currentPage}
             totalPages={totalPages}
             onPageChange={setCurrentPage}
-            totalItems={filteredFees.length}
+            totalItems={totalCount}
             itemsPerPage={ITEMS_PER_PAGE}
             itemLabel="records"
           />
@@ -274,7 +295,7 @@ export default function FeesPage() {
       <AddFeeModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        onSuccess={fetchFees}
+        onSuccess={() => { fetchFees(currentPage, filterStatus); fetchStats(); }}
       />
 
       <EditFeeModal
@@ -283,7 +304,7 @@ export default function FeesPage() {
           setIsEditModalOpen(false);
           setEditingFee(null);
         }}
-        onSuccess={fetchFees}
+        onSuccess={() => { fetchFees(currentPage, filterStatus); fetchStats(); }}
         fee={editingFee}
       />
     </div>

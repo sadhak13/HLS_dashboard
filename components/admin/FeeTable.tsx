@@ -36,7 +36,7 @@ const statusConfig: Record<string, { variant: 'success' | 'warning' | 'danger'; 
   overdue: { variant: 'danger', label: 'Overdue' },
 };
 
-export function FeeTable({ fees, isLoading, onMarkPaid, onEdit }: FeeTableProps) {
+export const FeeTable = React.memo(function FeeTable({ fees, isLoading, onMarkPaid, onEdit }: FeeTableProps) {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center p-8 h-64">
@@ -140,4 +140,4 @@ export function FeeTable({ fees, isLoading, onMarkPaid, onEdit }: FeeTableProps)
       </TableBody>
     </Table>
   );
-}
+});

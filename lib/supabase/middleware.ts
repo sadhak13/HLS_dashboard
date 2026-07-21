@@ -48,22 +48,7 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
-  // --- 2. Authenticated user trying to access /login ---
-  if (user && pathname.startsWith('/login')) {
-    // Fetch their role to redirect to the correct dashboard
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', user.id)
-      .single()
-
-    if (profile?.role === 'COACH') {
-      return NextResponse.redirect(new URL('/coach-dashboard', request.url))
-    }
-    return NextResponse.redirect(new URL('/dashboard', request.url))
-  }
-
-  // --- 3. Role-based route protection (server-enforced) ---
+  // --- 2 & 3. Role-based routing (single profile fetch) ---
   if (user) {
     const { data: profile } = await supabase
       .from('profiles')
@@ -71,15 +56,20 @@ export async function updateSession(request: NextRequest) {
       .eq('id', user.id)
       .single()
 
+    if (pathname.startsWith('/login')) {
+      if (profile?.role === 'COACH') {
+        return NextResponse.redirect(new URL('/coach-dashboard', request.url))
+      }
+      return NextResponse.redirect(new URL('/dashboard', request.url))
+    }
+
     const isAdminRoute = ADMIN_ROUTES.some((r) => pathname.startsWith(r))
     const isCoachRoute = COACH_ROUTES.some((r) => pathname.startsWith(r))
 
-    // Coach trying to access admin area
     if (profile?.role === 'COACH' && isAdminRoute) {
       return NextResponse.redirect(new URL('/coach-dashboard', request.url))
     }
 
-    // Admin trying to access coach area
     if (profile?.role === 'ADMIN' && isCoachRoute) {
       return NextResponse.redirect(new URL('/dashboard', request.url))
     }

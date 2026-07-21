@@ -2,15 +2,31 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
+import { randomBytes } from 'crypto'
+import { z } from 'zod'
+import { rateLimit } from '@/lib/rate-limit'
 import type { Database } from '@/types/database.types'
 
 type ProfileInsert = Database['public']['Tables']['profiles']['Insert']
 type CoachInsert = Database['public']['Tables']['coaches']['Insert']
 
+function generateSecurePassword(): string {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$%'
+  const bytes = randomBytes(12)
+  let password = ''
+  for (let i = 0; i < 12; i++) {
+    password += chars[bytes[i] % chars.length]
+  }
+  return password
+}
+
 export async function resetCoachPassword(userId: string) {
+  const rl = rateLimit(`reset-password:${userId}`, { maxRequests: 3, windowMs: 300_000 })
+  if (!rl.success) return { error: rl.error }
+
   const adminClient = createAdminClient()
 
-  const newPassword = 'Welcome123!'
+  const newPassword = generateSecurePassword()
 
   const { error } = await adminClient.auth.admin.updateUserById(userId, {
     password: newPassword,
@@ -24,14 +40,34 @@ export async function resetCoachPassword(userId: string) {
   return { success: true, password: newPassword }
 }
 
-export async function createCoachAccount(formData: FormData) {
-  const email = formData.get('email') as string
-  const fullName = formData.get('fullName') as string
-  const branchId = formData.get('branchId') as string
-  const phone = formData.get('phone') as string
-  const batchIdsJson = formData.get('batchIds') as string
+const coachFormSchema = z.object({
+  email: z.string().email('Invalid email address'),
+  fullName: z.string().min(3, 'Full name must be at least 3 characters'),
+  branchId: z.string().uuid('Invalid branch'),
+  phone: z.string().optional().default(''),
+  batchIds: z.string().transform(s => {
+    try { return JSON.parse(s) as string[] } catch { return [] }
+  }),
+})
 
-  const password = 'Welcome123!'
+export async function createCoachAccount(formData: FormData) {
+  const rl = rateLimit('create-coach', { maxRequests: 5, windowMs: 60_000 })
+  if (!rl.success) return { error: rl.error }
+
+  const raw: Record<string, unknown> = {}
+  formData.forEach((value, key) => { raw[key] = value })
+  const parsed = coachFormSchema.safeParse(raw)
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0].message }
+  }
+
+  const { email, fullName, branchId, phone, batchIds } = parsed.data
+
+  if (batchIds.length === 0) {
+    return { error: 'At least one batch must be assigned' }
+  }
+
+  const password = generateSecurePassword()
 
   const adminClient = createAdminClient()
 
@@ -80,19 +116,12 @@ export async function createCoachAccount(formData: FormData) {
   }
 
   // 4. Create coach_batches junction records
-  if (batchIdsJson) {
-    try {
-      const batchIds: string[] = JSON.parse(batchIdsJson)
-      if (batchIds.length > 0) {
-        const junctionRecords = batchIds.map(batchId => ({
-          coach_id: (coachData as any).id,
-          batch_id: batchId,
-        }))
-        await (adminClient as any).from('coach_batches').insert(junctionRecords)
-      }
-    } catch {
-      // Non-critical: coach is created, batch assignments can be added later
-    }
+  if (batchIds.length > 0) {
+    const junctionRecords = batchIds.map(batchId => ({
+      coach_id: (coachData as any).id,
+      batch_id: batchId,
+    }))
+    await (adminClient as any).from('coach_batches').insert(junctionRecords)
   }
 
   revalidatePath('/coaches')

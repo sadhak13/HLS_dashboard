@@ -7,7 +7,7 @@ import { FeeTable } from '@/components/admin/FeeTable';
 import { EditFeeModal, FeeRecord } from '@/components/admin/EditFeeModal';
 import { Pagination } from '@/components/ui/Pagination';
 import { IndianRupee, Zap, ChevronLeft, ChevronRight, TrendingUp, Clock } from 'lucide-react';
-import { generateNextMonthFeesForBranch } from '@/app/(admin)/fees/actions';
+import { generateFeesForBranches } from '@/app/(admin)/fees/actions';
 import { format, addMonths, subMonths, isAfter, startOfMonth } from 'date-fns';
 import { getCoachBranches } from '@/lib/coach';
 
@@ -82,30 +82,18 @@ export default function MyFeesPage() {
     setIsGeneratingFees(true);
     setGenerateMessage('');
 
-    let totalCreated = 0;
-    let hasError = false;
+    const result = await generateFeesForBranches(branchIds, selectedMonthStr);
 
-    for (const bid of branchIds) {
-      const result = await generateNextMonthFeesForBranch(bid, selectedMonthStr);
-      if (result.error) {
-        setGenerateMessage(`Error: ${result.error}`);
-        hasError = true;
-        break;
-      } else if (result.createdCount) {
-        totalCreated += result.createdCount;
-      }
-    }
-
-    if (!hasError) {
-      if (totalCreated === 0) {
-        setGenerateMessage('All players already have fees for this month');
-      } else {
-        setGenerateMessage(`Successfully created fees for ${totalCreated} players in ${selectedMonthDisplay}`);
-        setTimeout(() => {
-          setGenerateMessage('');
-          fetchFees();
-        }, 2000);
-      }
+    if (result.error) {
+      setGenerateMessage(`Error: ${result.error}`);
+    } else if (result.message) {
+      setGenerateMessage(result.message);
+    } else {
+      setGenerateMessage(`Successfully created fees for ${result.createdCount} players in ${selectedMonthDisplay}`);
+      setTimeout(() => {
+        setGenerateMessage('');
+        fetchFees();
+      }, 2000);
     }
 
     setIsGeneratingFees(false);

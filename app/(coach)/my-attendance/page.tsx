@@ -193,9 +193,15 @@ export default function CoachAttendancePage() {
     const batchIds = batches.map(b => b.id);
     if (batchIds.length === 0 && !branchId) return;
 
+    const now = new Date();
+    const rangeStart = new Date(now.getFullYear(), now.getMonth() - 3, 1).toISOString().split('T')[0];
+    const rangeEnd = new Date(now.getFullYear(), now.getMonth() + 2, 0).toISOString().split('T')[0];
+
     let query = (supabase as any)
       .from('attendance')
-      .select('date');
+      .select('date')
+      .gte('date', rangeStart)
+      .lte('date', rangeEnd);
 
     if (batchIds.length > 0) {
       query = query.in('batch_id', batchIds);

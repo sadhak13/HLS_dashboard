@@ -58,7 +58,8 @@ function hasTimeOverlap(
 export function AddCoachModal({ isOpen, onClose, onSuccess }: AddCoachModalProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
-  const [successMsg, setSuccessMsg] = useState('');
+  const [createdCredentials, setCreatedCredentials] = useState<{ email: string; password: string } | null>(null);
+  const [copied, setCopied] = useState(false);
   const [branches, setBranches] = useState<BranchWithBatches[]>([]);
   const [selectedBatchIds, setSelectedBatchIds] = useState<string[]>([]);
   const [overlapWarning, setOverlapWarning] = useState('');
@@ -93,7 +94,8 @@ export function AddCoachModal({ isOpen, onClose, onSuccess }: AddCoachModalProps
         }
       };
       fetchData();
-      setSuccessMsg('');
+      setCreatedCredentials(null);
+      setCopied(false);
       setError('');
       setSelectedBatchIds([]);
       setOverlapWarning('');
@@ -186,11 +188,8 @@ export function AddCoachModal({ isOpen, onClose, onSuccess }: AddCoachModalProps
         throw new Error(result.error);
       }
 
-      setSuccessMsg(`Account created! Coach can log in with Email: ${result.email} and Password: ${result.password}`);
-      setTimeout(() => {
-        onSuccess();
-        onClose();
-      }, 5000);
+      setCreatedCredentials({ email: result.email!, password: result.password! });
+      onSuccess();
     } catch (err: any) {
       setError(err.message || 'Failed to create coach account');
     } finally {
@@ -198,20 +197,67 @@ export function AddCoachModal({ isOpen, onClose, onSuccess }: AddCoachModalProps
     }
   };
 
+  const handleCopyCredentials = async () => {
+    if (!createdCredentials) return;
+    const text = `Email: ${createdCredentials.email}\nPassword: ${createdCredentials.password}`;
+    await navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  if (createdCredentials) {
+    return (
+      <Modal isOpen={isOpen} onClose={onClose} title="Coach Account Created" maxWidth="md">
+        <div className="space-y-5">
+          <div className="p-4 rounded-xl bg-green-500/10 border border-green-500/20">
+            <p className="text-sm font-medium text-green-400 mb-3">
+              Account created successfully! Share these credentials with the coach:
+            </p>
+            <div className="space-y-2 bg-black/20 rounded-lg p-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-gray-400">Email</span>
+                <span className="text-sm text-white font-mono">{createdCredentials.email}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-gray-400">Password</span>
+                <span className="text-sm text-white font-mono">{createdCredentials.password}</span>
+              </div>
+            </div>
+          </div>
+
+          <p className="text-xs text-amber-400/80">
+            This password will not be shown again. Make sure to copy or share it before closing.
+          </p>
+
+          <div className="flex justify-end gap-3 pt-2 border-t border-white/[0.07]">
+            <button
+              type="button"
+              onClick={handleCopyCredentials}
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium text-white bg-white/[0.06] border border-white/10 hover:bg-white/[0.1] transition-all duration-200 active:scale-95"
+            >
+              {copied ? 'Copied!' : 'Copy Credentials'}
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-5 py-2.5 rounded-xl text-sm font-semibold text-white bg-green-600 hover:bg-green-500 border border-green-500/30 transition-all duration-200 active:scale-95"
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      </Modal>
+    );
+  }
+
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Provision Coach Account" maxWidth="md">
       <form onSubmit={handleSubmit} className="space-y-5">
-        {/* Error / Success Notices */}
+        {/* Error Notice */}
         {error && (
           <div className="flex items-start gap-3 p-3.5 rounded-xl bg-red-500/10 border border-red-500/20">
             <AlertCircle className="w-4 h-4 text-red-400 mt-0.5 shrink-0" />
             <p className="text-sm text-red-400">{error}</p>
-          </div>
-        )}
-        {successMsg && (
-          <div className="flex items-start gap-3 p-3.5 rounded-xl bg-green-500/10 border border-green-500/20">
-            <AlertCircle className="w-4 h-4 text-green-400 mt-0.5 shrink-0" />
-            <p className="text-sm text-green-400">{successMsg}</p>
           </div>
         )}
         {overlapWarning && (
@@ -231,7 +277,6 @@ export function AddCoachModal({ isOpen, onClose, onSuccess }: AddCoachModalProps
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
               required
-              disabled={!!successMsg}
               className={glassInputClass}
             />
           </div>
@@ -243,7 +288,6 @@ export function AddCoachModal({ isOpen, onClose, onSuccess }: AddCoachModalProps
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              disabled={!!successMsg}
               className={glassInputClass}
             />
           </div>
@@ -254,7 +298,6 @@ export function AddCoachModal({ isOpen, onClose, onSuccess }: AddCoachModalProps
               placeholder="e.g. +91 9876543210"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
-              disabled={!!successMsg}
               className={glassInputClass}
             />
           </div>
@@ -279,7 +322,7 @@ export function AddCoachModal({ isOpen, onClose, onSuccess }: AddCoachModalProps
               <select
                 value={selectedBranchId}
                 onChange={(e) => setSelectedBranchId(e.target.value)}
-                disabled={!!successMsg || branches.length === 0}
+                disabled={branches.length === 0}
                 className="w-full px-4 py-2.5 bg-white/[0.05] border border-white/10 rounded-xl text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500/50 appearance-none cursor-pointer [color-scheme:dark]"
               >
                 {branches.length === 0 && <option value="" className="bg-slate-900">No Branches Available</option>}
@@ -299,7 +342,7 @@ export function AddCoachModal({ isOpen, onClose, onSuccess }: AddCoachModalProps
               <select
                 value={selectedBatchId}
                 onChange={(e) => setSelectedBatchId(e.target.value)}
-                disabled={!!successMsg || activeBranchBatches.length === 0}
+                disabled={activeBranchBatches.length === 0}
                 className="w-full px-4 py-2.5 bg-white/[0.05] border border-white/10 rounded-xl text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500/50 appearance-none cursor-pointer [color-scheme:dark]"
               >
                 {activeBranchBatches.length === 0 && (
@@ -317,7 +360,7 @@ export function AddCoachModal({ isOpen, onClose, onSuccess }: AddCoachModalProps
             <button
               type="button"
               onClick={handleAddBatch}
-              disabled={!!successMsg || !selectedBatchId}
+              disabled={!selectedBatchId}
               className="w-full inline-flex items-center justify-center gap-1.5 px-5 py-2.5 rounded-xl text-sm font-semibold text-white bg-green-600 hover:bg-green-500 border border-green-500/30 transition-all duration-200 active:scale-95 disabled:opacity-50 disabled:pointer-events-none"
             >
               <Plus className="w-4 h-4" />
@@ -364,7 +407,7 @@ export function AddCoachModal({ isOpen, onClose, onSuccess }: AddCoachModalProps
                         <button
                           type="button"
                           onClick={() => handleRemoveBatch(id)}
-                          disabled={!!successMsg}
+            
                           className="p-1.5 rounded-lg text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -379,24 +422,22 @@ export function AddCoachModal({ isOpen, onClose, onSuccess }: AddCoachModalProps
         </div>
 
         {/* Action Row */}
-        {!successMsg && (
-          <div className="flex justify-end gap-3 mt-6 pt-2 border-t border-white/[0.07]">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-5 py-2.5 rounded-xl text-sm font-medium text-gray-400 bg-white/[0.04] border border-white/10 hover:bg-white/[0.08] hover:text-gray-200 transition-all duration-200 active:scale-95"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl text-sm font-semibold text-white bg-green-600 hover:bg-green-500 shadow-lg shadow-green-500/20 border border-green-500/30 transition-all duration-200 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
-            >
-              Create Account
-            </button>
-          </div>
-        )}
+        <div className="flex justify-end gap-3 mt-6 pt-2 border-t border-white/[0.07]">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-5 py-2.5 rounded-xl text-sm font-medium text-gray-400 bg-white/[0.04] border border-white/10 hover:bg-white/[0.08] hover:text-gray-200 transition-all duration-200 active:scale-95"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={isLoading}
+            className="inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl text-sm font-semibold text-white bg-green-600 hover:bg-green-500 shadow-lg shadow-green-500/20 border border-green-500/30 transition-all duration-200 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            Create Account
+          </button>
+        </div>
       </form>
     </Modal>
   );

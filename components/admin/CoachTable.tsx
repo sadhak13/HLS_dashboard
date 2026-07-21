@@ -17,6 +17,7 @@ export function CoachTable({ coaches, isLoading }: CoachTableProps) {
   const [resettingName, setResettingName] = useState('');
   const [isResetting, setIsResetting] = useState(false);
   const [resetResult, setResetResult] = useState<{ password: string; name: string } | null>(null);
+  const [copied, setCopied] = useState(false);
 
   async function handleResetPassword() {
     if (!resettingUserId) return;
@@ -203,10 +204,21 @@ export function CoachTable({ coaches, isLoading }: CoachTableProps) {
             <p className="text-xs text-gray-500 dark:text-gray-400">
               They will be required to change this password on their next login.
             </p>
-            <div className="flex justify-end">
+            <div className="flex justify-end gap-3">
               <button
                 type="button"
-                onClick={() => setResetResult(null)}
+                onClick={async () => {
+                  await navigator.clipboard.writeText(`Password: ${resetResult.password}`);
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 2000);
+                }}
+                className="px-4 py-2 text-sm font-medium rounded-lg text-gray-700 dark:text-gray-200 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+              >
+                {copied ? 'Copied!' : 'Copy Password'}
+              </button>
+              <button
+                type="button"
+                onClick={() => { setResetResult(null); setCopied(false); }}
                 className="px-4 py-2 text-sm font-medium rounded-lg text-white bg-green-600 hover:bg-green-500 transition-colors"
               >
                 Done

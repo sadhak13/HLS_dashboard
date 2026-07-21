@@ -28,7 +28,7 @@ function calculateAge(dob: string): number {
   return age;
 }
 
-export function PlayerTable({ players, isLoading, onEdit, onDelete }: PlayerTableProps) {
+export const PlayerTable = React.memo(function PlayerTable({ players, isLoading, onEdit, onDelete }: PlayerTableProps) {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center p-8 h-64">
@@ -129,4 +129,4 @@ export function PlayerTable({ players, isLoading, onEdit, onDelete }: PlayerTabl
       </TableBody>
     </Table>
   );
-}
+});
