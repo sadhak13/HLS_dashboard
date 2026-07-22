@@ -40,9 +40,17 @@ export async function resetCoachPassword(userId: string) {
   return { success: true, password: newPassword }
 }
 
+export async function getCoachEmail(userId: string) {
+  const adminClient = createAdminClient()
+  const { data, error } = await adminClient.auth.admin.getUserById(userId)
+  if (error || !data.user) return { email: '' }
+  return { email: data.user.email || '' }
+}
+
 const coachEditSchema = z.object({
   coachId: z.string().uuid('Invalid coach ID'),
   fullName: z.string().min(3, 'Full name must be at least 3 characters'),
+  email: z.string().email('Invalid email address'),
   phone: z.string().optional().default(''),
   batchIds: z.string().transform(s => {
     try { return JSON.parse(s) as string[] } catch { return [] }
@@ -60,7 +68,7 @@ export async function updateCoachDetails(formData: FormData) {
     return { error: parsed.error.issues[0].message }
   }
 
-  const { coachId, fullName, phone, batchIds } = parsed.data
+  const { coachId, fullName, email, phone, batchIds } = parsed.data
 
   if (batchIds.length === 0) {
     return { error: 'At least one batch must be assigned' }
@@ -77,6 +85,15 @@ export async function updateCoachDetails(formData: FormData) {
 
   if (fetchError || !coach) {
     return { error: 'Coach not found' }
+  }
+
+  // Update auth email
+  const { error: emailError } = await adminClient.auth.admin.updateUserById(coach.user_id, {
+    email: email,
+  })
+
+  if (emailError) {
+    return { error: emailError.message }
   }
 
   // Update profile name

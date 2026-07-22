@@ -34,8 +34,11 @@ function ActionButtons({ coach, isInactive, onEdit, onTransfer, onReset, onDeact
           <button type="button" onClick={onReset} className="p-2 rounded-lg text-amber-400 hover:bg-amber-500/10 transition-colors" title="Reset Password">
             <KeyRound className="w-4 h-4" />
           </button>
-          <button type="button" onClick={onDeactivate} className="p-2 rounded-lg text-red-400 hover:bg-red-500/10 transition-colors" title="Deactivate Coach">
+          <button type="button" onClick={onDeactivate} className="p-2 rounded-lg text-orange-400 hover:bg-orange-500/10 transition-colors" title="Deactivate Coach">
             <UserX className="w-4 h-4" />
+          </button>
+          <button type="button" onClick={onDelete} className="p-2 rounded-lg text-red-400 hover:bg-red-500/10 transition-colors" title="Delete Coach">
+            <Trash2 className="w-4 h-4" />
           </button>
         </>
       )}
@@ -49,7 +52,7 @@ function ActionButtons({ coach, isInactive, onEdit, onTransfer, onReset, onDeact
               <ArrowRightLeft className="w-4 h-4" />
             </button>
           )}
-          <button type="button" onClick={onDelete} className="p-2 rounded-lg text-red-400 hover:bg-red-500/10 transition-colors" title="Delete Permanently">
+          <button type="button" onClick={onDelete} className="p-2 rounded-lg text-red-400 hover:bg-red-500/10 transition-colors" title="Delete Coach">
             <Trash2 className="w-4 h-4" />
           </button>
         </>

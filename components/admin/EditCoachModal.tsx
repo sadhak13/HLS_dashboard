@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Modal } from '@/components/ui/Modal';
-import { updateCoachDetails } from '@/app/(admin)/coaches/actions';
+import { updateCoachDetails, getCoachEmail } from '@/app/(admin)/coaches/actions';
 import { createClient } from '@/lib/supabase/client';
 import { Clock, MapPin, Plus, Trash2, AlertCircle } from 'lucide-react';
 
@@ -30,6 +30,7 @@ interface EditCoachModalProps {
     id: string;
     user_id: string;
     phone: string | null;
+    email?: string | null;
     profiles: { full_name: string } | null;
     coach_batches: { batch_id: string }[];
   } | null;
@@ -72,6 +73,7 @@ export function EditCoachModal({ isOpen, onClose, onSuccess, coach }: EditCoachM
   const [selectedBatchId, setSelectedBatchId] = useState('');
 
   const [fullName, setFullName] = useState('');
+  const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
 
   useEffect(() => {
@@ -93,6 +95,9 @@ export function EditCoachModal({ isOpen, onClose, onSuccess, coach }: EditCoachM
         }
       };
       fetchData();
+
+      // Fetch email from auth
+      getCoachEmail(coach.user_id).then(({ email: e }) => setEmail(e));
 
       setFullName(coach.profiles?.full_name || '');
       setPhone(coach.phone || '');
@@ -167,6 +172,7 @@ export function EditCoachModal({ isOpen, onClose, onSuccess, coach }: EditCoachM
     const formData = new FormData();
     formData.append('coachId', coach.id);
     formData.append('fullName', fullName);
+    formData.append('email', email);
     formData.append('phone', phone);
     formData.append('batchIds', JSON.stringify(selectedBatchIds));
 
@@ -215,6 +221,17 @@ export function EditCoachModal({ isOpen, onClose, onSuccess, coach }: EditCoachM
             />
           </div>
           <div>
+            <label className={glassLabelClass}>Email Address</label>
+            <input
+              type="email"
+              placeholder="e.g. john@academy.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              className={glassInputClass}
+            />
+          </div>
+          <div className="sm:col-span-2">
             <label className={glassLabelClass}>Phone Number</label>
             <input
               type="tel"
