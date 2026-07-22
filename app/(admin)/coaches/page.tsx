@@ -3,6 +3,8 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { CoachTable } from '@/components/admin/CoachTable';
 import { AddCoachModal } from '@/components/admin/AddCoachModal';
+import { EditCoachModal } from '@/components/admin/EditCoachModal';
+import { TransferBatchesModal } from '@/components/admin/TransferBatchesModal';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Button } from '@/components/ui/Button';
 import { UserPlus } from 'lucide-react';
@@ -11,7 +13,9 @@ import { createClient } from '@/lib/supabase/client';
 export default function CoachesPage() {
   const [coaches, setCoaches] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [editingCoach, setEditingCoach] = useState<any | null>(null);
+  const [transferringCoach, setTransferringCoach] = useState<any | null>(null);
 
   const supabase = createClient();
 
@@ -46,10 +50,10 @@ export default function CoachesPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Coach Directory</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400">Provision accounts and assign coaches to batches.</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400">Provision accounts, edit details, and manage coach assignments.</p>
         </div>
         {(coaches.length > 0 || isLoading) && (
-          <Button onClick={() => setIsModalOpen(true)} className="w-full sm:w-auto shrink-0">
+          <Button onClick={() => setIsAddModalOpen(true)} className="w-full sm:w-auto shrink-0">
             <UserPlus className="w-4 h-4 mr-2" />
             Provision Account
           </Button>
@@ -64,7 +68,7 @@ export default function CoachesPage() {
               title="No coaches found"
               description="Provision your first coach account to give them access to their assigned batches."
               action={
-                <Button onClick={() => setIsModalOpen(true)}>
+                <Button onClick={() => setIsAddModalOpen(true)}>
                   <UserPlus className="w-4 h-4 mr-2" />
                   Provision Coach
                 </Button>
@@ -72,14 +76,34 @@ export default function CoachesPage() {
             />
           </div>
         ) : (
-          <CoachTable coaches={coaches} isLoading={isLoading} />
+          <CoachTable
+            coaches={coaches}
+            isLoading={isLoading}
+            onEdit={(coach) => setEditingCoach(coach)}
+            onTransfer={(coach) => setTransferringCoach(coach)}
+          />
         )}
       </div>
 
       <AddCoachModal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
+        isOpen={isAddModalOpen}
+        onClose={() => setIsAddModalOpen(false)}
         onSuccess={fetchCoaches}
+      />
+
+      <EditCoachModal
+        isOpen={!!editingCoach}
+        onClose={() => setEditingCoach(null)}
+        onSuccess={fetchCoaches}
+        coach={editingCoach}
+      />
+
+      <TransferBatchesModal
+        isOpen={!!transferringCoach}
+        onClose={() => setTransferringCoach(null)}
+        onSuccess={fetchCoaches}
+        sourceCoach={transferringCoach}
+        coaches={coaches}
       />
     </div>
   );

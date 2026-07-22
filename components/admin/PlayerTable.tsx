@@ -111,12 +111,13 @@ export const PlayerTable = React.memo(function PlayerTable({ players, isLoading,
                       <Edit2 className="w-4 h-4 text-gray-500" />
                     </Button>
                   )}
-                  {onDelete && player.status !== 'dropped' && (
+                  {onDelete && (
                     <Button
                       variant="ghost"
                       size="sm"
                       className="w-8 h-8 p-0 text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
                       onClick={() => onDelete(player)}
+                      title={player.status === 'dropped' ? 'Permanently Delete' : 'Drop Player'}
                     >
                       <Trash2 className="w-4 h-4" />
                     </Button>

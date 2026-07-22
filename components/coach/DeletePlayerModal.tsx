@@ -66,7 +66,8 @@ export function DeletePlayerModal({ isOpen, onClose, onSuccess, player, deleteAc
 
       fetchPendingFees()
       setError('')
-      setConfirmPermanentDelete(false)
+      // Auto-select permanent delete if player is already dropped
+      setConfirmPermanentDelete(player.status === 'dropped')
     }
   }, [isOpen, player])
 
