@@ -1,7 +1,7 @@
 "use client";
 
 import React from 'react';
-import { Menu, Bell, Search } from 'lucide-react';
+import { Menu, Bell } from 'lucide-react';
 import { UserDropdown } from './UserDropdown';
 
 interface TopBarProps {
@@ -19,16 +19,6 @@ export function TopBar({ onMenuClick }: TopBarProps) {
         >
           <Menu className="w-6 h-6" />
         </button>
-        
-        {/* Search */}
-        <div className="hidden lg:flex items-center relative">
-          <Search className="w-4 h-4 absolute left-3 text-gray-400" />
-          <input 
-            type="text" 
-            placeholder="Search..." 
-            className="pl-9 pr-4 py-2 bg-white/[0.05] border border-white/10 rounded-xl text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-green-500/50 w-64 transition-all"
-          />
-        </div>
       </div>
 
       <div className="flex items-center gap-3">
