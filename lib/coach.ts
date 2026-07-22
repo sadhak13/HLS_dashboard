@@ -10,16 +10,21 @@ export async function getCoachBranches(userId: string): Promise<CoachBranch[]> {
 
   const { data: coachData } = await (supabase as any)
     .from('coaches')
-    .select('id, branch_id, branches (id, name), coach_batches (batches (branch_id, branches (id, name)))')
+    .select('id, branch_id, branches (id, name)')
     .eq('user_id', userId)
     .maybeSingle()
 
   if (!coachData) return []
 
+  const { data: coachBatches } = await (supabase as any)
+    .from('coach_batches')
+    .select('batch_id, batches (branch_id, branches (id, name))')
+    .eq('coach_id', coachData.id)
+
   const branchMap = new Map<string, string>()
 
-  if (coachData.coach_batches && coachData.coach_batches.length > 0) {
-    for (const cb of coachData.coach_batches) {
+  if (coachBatches && coachBatches.length > 0) {
+    for (const cb of coachBatches) {
       const branch = cb.batches?.branches
       if (branch) branchMap.set(branch.id, branch.name)
     }
