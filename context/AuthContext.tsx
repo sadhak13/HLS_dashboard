@@ -39,6 +39,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         if (!mounted) return;
+
+        // TOKEN_REFRESHED fires on tab focus — don't disrupt existing state
+        if (event === 'TOKEN_REFRESHED') return;
+
         const currentUser = session?.user ?? null;
         setUser(currentUser);
 
@@ -49,7 +53,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (mounted) setProfile(null);
         }
 
-        // Always clear the loader once we have a definitive auth state
         if (mounted) setIsLoading(false);
       }
     );
