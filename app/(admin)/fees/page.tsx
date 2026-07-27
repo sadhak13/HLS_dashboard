@@ -40,6 +40,10 @@ export default function FeesPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [filterStatus, setFilterStatus] = useState<'all' | 'paid' | 'pending' | 'overdue'>('all');
+  const [filterBranch, setFilterBranch] = useState('all');
+  const [filterBatch, setFilterBatch] = useState('all');
+  const [branches, setBranches] = useState<{ id: string; name: string }[]>([]);
+  const [batches, setBatches] = useState<{ id: string; name: string; branch_id: string }[]>([]);
   const [isGeneratingFees, setIsGeneratingFees] = useState(false);
   const [generateMessage, setGenerateMessage] = useState('');
   const [editingFee, setEditingFee] = useState<FeeRecord | null>(null);
@@ -52,20 +56,43 @@ export default function FeesPage() {
 
   const supabase = createClient();
 
-  const fetchFees = useCallback(async (page: number, status: string) => {
+  useEffect(() => {
+    const fetchFilters = async () => {
+      const { data: branchData } = await supabase.from('branches').select('id, name').order('name');
+      if (branchData) setBranches(branchData);
+
+      const { data: batchData } = await (supabase as any).from('batches').select('id, name, branch_id').order('name');
+      if (batchData) setBatches(batchData);
+    };
+    fetchFilters();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const fetchFees = useCallback(async (page: number, status: string, branch: string, batch: string) => {
     setIsLoading(true);
     const from = (page - 1) * ITEMS_PER_PAGE;
     const to = from + ITEMS_PER_PAGE - 1;
 
+    const selectStr = batch !== 'all'
+      ? '*, players!inner (full_name, branch_id, batch_id), branches (name)'
+      : '*, players (full_name, branch_id, batch_id), branches (name)';
+
     let query = supabase
       .from('fees')
-      .select('*, players (full_name, branch_id), branches (name)', { count: 'exact' })
+      .select(selectStr, { count: 'exact' })
       .eq('month', selectedMonthStr)
       .order('created_at', { ascending: false })
       .range(from, to);
 
     if (status !== 'all') {
       query = query.eq('status', status);
+    }
+
+    if (branch !== 'all') {
+      query = query.eq('branch_id', branch);
+    }
+
+    if (batch !== 'all') {
+      query = query.eq('players.batch_id', batch);
     }
 
     const { data, error, count } = await query;
@@ -79,11 +106,25 @@ export default function FeesPage() {
     setIsLoading(false);
   }, [selectedMonthStr]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const fetchStats = useCallback(async () => {
-    const { data } = await supabase
+  const fetchStats = useCallback(async (branch: string, batch: string) => {
+    const selectStr = batch !== 'all'
+      ? 'status, amount, players!inner (batch_id)'
+      : 'status, amount';
+
+    let query = supabase
       .from('fees')
-      .select('status, amount')
-      .eq('month', selectedMonthStr) as { data: { status: string; amount: number }[] | null };
+      .select(selectStr)
+      .eq('month', selectedMonthStr);
+
+    if (branch !== 'all') {
+      query = query.eq('branch_id', branch);
+    }
+
+    if (batch !== 'all') {
+      query = query.eq('players.batch_id', batch);
+    }
+
+    const { data } = await query as { data: { status: string; amount: number }[] | null };
 
     if (data) {
       const collected = data.filter(f => f.status === 'paid').reduce((s, f) => s + f.amount, 0);
@@ -94,9 +135,9 @@ export default function FeesPage() {
   }, [selectedMonthStr]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    fetchFees(currentPage, filterStatus);
-    fetchStats();
-  }, [fetchFees, fetchStats, currentPage, filterStatus]);
+    fetchFees(currentPage, filterStatus, filterBranch, filterBatch);
+    fetchStats(filterBranch, filterBatch);
+  }, [fetchFees, fetchStats, currentPage, filterStatus, filterBranch, filterBatch]);
 
   const handleMarkPaid = async (feeId: string) => {
     const { error } = await (supabase as any)
@@ -108,8 +149,8 @@ export default function FeesPage() {
       .eq('id', feeId);
 
     if (!error) {
-      fetchFees(currentPage, filterStatus);
-      fetchStats();
+      fetchFees(currentPage, filterStatus, filterBranch, filterBatch);
+      fetchStats(filterBranch, filterBatch);
     }
   };
 
@@ -127,8 +168,8 @@ export default function FeesPage() {
       setGenerateMessage(`✓ Successfully created fees for ${result.createdCount} players in ${selectedMonthDisplay}`);
       setTimeout(() => {
         setGenerateMessage('');
-        fetchFees(currentPage, filterStatus);
-        fetchStats();
+        fetchFees(currentPage, filterStatus, filterBranch, filterBatch);
+        fetchStats(filterBranch, filterBatch);
       }, 2000);
     }
 
@@ -159,6 +200,22 @@ export default function FeesPage() {
     setCurrentPage(1);
   };
 
+  const handleBranchChange = (branchId: string) => {
+    setFilterBranch(branchId);
+    setFilterBatch('all');
+    setCurrentPage(1);
+  };
+
+  const handleBatchChange = (batchId: string) => {
+    setFilterBatch(batchId);
+    setCurrentPage(1);
+  };
+
+  const branchBatches = filterBranch === 'all'
+    ? []
+    : batches.filter((b) => b.branch_id === filterBranch);
+  const showBatchFilter = branchBatches.length > 1;
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -167,17 +224,43 @@ export default function FeesPage() {
           <p className="text-sm text-gray-500 dark:text-gray-400">Track monthly fee collection across all branches.</p>
         </div>
         
-        {/* Month Navigation */}
-        <div className="flex items-center gap-4 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-1">
-          <Button variant="ghost" onClick={handlePrevMonth} className="p-2 h-auto">
-            <ChevronLeft className="w-5 h-5" />
-          </Button>
-          <div className="text-sm font-medium min-w-[120px] text-center text-gray-900 dark:text-white">
-            {selectedMonthDisplay}
+        {/* Month Navigation & Branch/Batch Filter */}
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full sm:w-auto">
+          <div className="flex items-center justify-between bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-1">
+            <Button variant="ghost" onClick={handlePrevMonth} className="p-2 h-auto">
+              <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5" />
+            </Button>
+            <div className="text-xs sm:text-sm font-medium min-w-[90px] sm:min-w-[120px] text-center text-gray-900 dark:text-white">
+              {selectedMonthDisplay}
+            </div>
+            <Button variant="ghost" onClick={handleNextMonth} disabled={isNextDisabled} className="p-2 h-auto">
+              <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5" />
+            </Button>
           </div>
-          <Button variant="ghost" onClick={handleNextMonth} disabled={isNextDisabled} className="p-2 h-auto">
-            <ChevronRight className="w-5 h-5" />
-          </Button>
+
+          <select
+            value={filterBranch}
+            onChange={(e) => handleBranchChange(e.target.value)}
+            className="px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-xs sm:text-sm font-medium text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-green-500/50 cursor-pointer"
+          >
+            <option value="all">All Branches</option>
+            {branches.map((b) => (
+              <option key={b.id} value={b.id}>{b.name}</option>
+            ))}
+          </select>
+
+          {showBatchFilter && (
+            <select
+              value={filterBatch}
+              onChange={(e) => handleBatchChange(e.target.value)}
+              className="px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-xs sm:text-sm font-medium text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-green-500/50 cursor-pointer"
+            >
+              <option value="all">All Batches</option>
+              {branchBatches.map((b) => (
+                <option key={b.id} value={b.id}>{b.name}</option>
+              ))}
+            </select>
+          )}
         </div>
 
         <div className="flex gap-2 flex-wrap">
@@ -295,7 +378,7 @@ export default function FeesPage() {
       <AddFeeModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        onSuccess={() => { fetchFees(currentPage, filterStatus); fetchStats(); }}
+        onSuccess={() => { fetchFees(currentPage, filterStatus, filterBranch, filterBatch); fetchStats(filterBranch, filterBatch); }}
       />
 
       <EditFeeModal
@@ -304,7 +387,7 @@ export default function FeesPage() {
           setIsEditModalOpen(false);
           setEditingFee(null);
         }}
-        onSuccess={() => { fetchFees(currentPage, filterStatus); fetchStats(); }}
+        onSuccess={() => { fetchFees(currentPage, filterStatus, filterBranch, filterBatch); fetchStats(filterBranch, filterBatch); }}
         fee={editingFee}
       />
     </div>

@@ -27,6 +27,10 @@ export default function PlayersPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingPlayer, setEditingPlayer] = useState<Player | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [filterBranch, setFilterBranch] = useState('all');
+  const [filterBatch, setFilterBatch] = useState('all');
+  const [branches, setBranches] = useState<{ id: string; name: string }[]>([]);
+  const [batches, setBatches] = useState<{ id: string; name: string; branch_id: string }[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 15;
   const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -46,7 +50,18 @@ export default function PlayersPage() {
 
   const supabase = createClient();
 
-  const fetchPlayers = useCallback(async (page: number, search: string) => {
+  useEffect(() => {
+    const fetchFilters = async () => {
+      const { data: branchData } = await supabase.from('branches').select('id, name').order('name');
+      if (branchData) setBranches(branchData);
+
+      const { data: batchData } = await (supabase as any).from('batches').select('id, name, branch_id').order('name');
+      if (batchData) setBatches(batchData);
+    };
+    fetchFilters();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const fetchPlayers = useCallback(async (page: number, search: string, branch: string, batch: string) => {
     setIsLoading(true);
     const from = (page - 1) * ITEMS_PER_PAGE;
     const to = from + ITEMS_PER_PAGE - 1;
@@ -63,6 +78,14 @@ export default function PlayersPage() {
       );
     }
 
+    if (branch !== 'all') {
+      query = query.eq('branch_id', branch);
+    }
+
+    if (batch !== 'all') {
+      query = query.eq('batch_id', batch);
+    }
+
     const { data, error, count } = await query;
 
     if (error) {
@@ -75,8 +98,8 @@ export default function PlayersPage() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    fetchPlayers(currentPage, searchQuery);
-  }, [fetchPlayers, currentPage, searchQuery]);
+    fetchPlayers(currentPage, searchQuery, filterBranch, filterBatch);
+  }, [fetchPlayers, currentPage, searchQuery, filterBranch, filterBatch]);
 
   const handleEdit = (player: Player) => {
     setEditingPlayer(player);
@@ -90,7 +113,7 @@ export default function PlayersPage() {
 
   // Called after AddPlayerModal succeeds. If player data is returned (new player), open the fees modal.
   const handlePlayerSuccess = (playerData?: { id: string; full_name: string; branch_id: string; enrolled_date: string }) => {
-    fetchPlayers(currentPage, searchQuery);
+    fetchPlayers(currentPage, searchQuery, filterBranch, filterBatch);
     if (playerData?.id) {
       setNewPlayerData(playerData);
       setShowAddFeesModal(true);
@@ -105,7 +128,7 @@ export default function PlayersPage() {
   const handlePlayerDeleted = () => {
     setShowDeleteModal(false);
     setPlayerToDelete(null);
-    fetchPlayers(currentPage, searchQuery);
+    fetchPlayers(currentPage, searchQuery, filterBranch, filterBatch);
   };
 
   const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
@@ -117,6 +140,22 @@ export default function PlayersPage() {
       setCurrentPage(1);
     }, 300);
   };
+
+  const handleBranchChange = (branchId: string) => {
+    setFilterBranch(branchId);
+    setFilterBatch('all');
+    setCurrentPage(1);
+  };
+
+  const handleBatchChange = (batchId: string) => {
+    setFilterBatch(batchId);
+    setCurrentPage(1);
+  };
+
+  const branchBatches = filterBranch === 'all'
+    ? []
+    : batches.filter((b) => b.branch_id === filterBranch);
+  const showBatchFilter = branchBatches.length > 1;
 
   return (
     <div className="space-y-6">
@@ -135,16 +174,41 @@ export default function PlayersPage() {
         )}
       </div>
 
-      {/* Search bar */}
+      {/* Search & Filters */}
       {(totalCount > 0 || searchQuery) && (
-        <div className="relative">
-        <input
+        <div className="flex flex-col sm:flex-row gap-3">
+          <input
             type="text"
             placeholder="Search by player name or parent..."
             defaultValue={searchQuery}
             onChange={(e) => handleSearch(e.target.value)}
-            className="w-full pl-4 pr-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white dark:placeholder-gray-400"
+            className="flex-1 pl-4 pr-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white dark:placeholder-gray-400"
           />
+          <div className="flex gap-2">
+            <select
+              value={filterBranch}
+              onChange={(e) => handleBranchChange(e.target.value)}
+              className="px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-xs sm:text-sm font-medium text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-green-500/50 cursor-pointer"
+            >
+              <option value="all">All Branches</option>
+              {branches.map((b) => (
+                <option key={b.id} value={b.id}>{b.name}</option>
+              ))}
+            </select>
+
+            {showBatchFilter && (
+              <select
+                value={filterBatch}
+                onChange={(e) => handleBatchChange(e.target.value)}
+                className="px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-xs sm:text-sm font-medium text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-green-500/50 cursor-pointer"
+              >
+                <option value="all">All Batches</option>
+                {branchBatches.map((b) => (
+                  <option key={b.id} value={b.id}>{b.name}</option>
+                ))}
+              </select>
+            )}
+          </div>
         </div>
       )}
 

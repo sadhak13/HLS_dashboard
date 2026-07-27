@@ -43,91 +43,151 @@ export const PlayerTable = React.memo(function PlayerTable({ players, isLoading,
     );
   }
 
+  if (players.length === 0) {
+    return (
+      <div className="text-center py-8 text-gray-500">
+        No players registered yet.
+      </div>
+    );
+  }
+
   return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>#</TableHead>
-          <TableHead>Player</TableHead>
-          <TableHead>Age</TableHead>
-          <TableHead>Branch</TableHead>
-          <TableHead>Parent / Contact</TableHead>
-          <TableHead>Enrolled</TableHead>
-          <TableHead>Status</TableHead>
-          <TableHead className="text-right">Actions</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {players.length === 0 ? (
-          <TableRow>
-            <TableCell colSpan={8} className="text-center py-8 text-gray-500">
-              No players registered yet.
-            </TableCell>
-          </TableRow>
-        ) : (
-          players.map((player, idx) => (
-            <TableRow key={player.id}>
-              <TableCell className="text-gray-400 text-sm">{idx + 1}</TableCell>
-              <TableCell>
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center justify-center w-9 h-9 rounded-full bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 shrink-0">
-                    <UserCircle2 className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <div className="font-medium text-gray-900 dark:text-white">{player.full_name}</div>
-                    <div className="text-xs text-gray-500">{formatDate(player.date_of_birth)}</div>
-                  </div>
+    <>
+      {/* Mobile card view */}
+      <div className="md:hidden divide-y divide-gray-200 dark:divide-gray-700">
+        {players.map((player) => (
+          <div key={player.id} className="p-4 space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="flex items-center justify-center w-9 h-9 rounded-full bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 shrink-0">
+                  <UserCircle2 className="w-5 h-5" />
                 </div>
-              </TableCell>
-              <TableCell>
-                <span className="font-medium">{calculateAge(player.date_of_birth)}</span>
-                <span className="text-gray-500 text-xs ml-1">yrs</span>
-              </TableCell>
-              <TableCell>
-                <span className="text-sm">{player.branches?.name || 'Unassigned'}</span>
-              </TableCell>
-              <TableCell>
-                <div className="text-sm font-medium text-gray-900 dark:text-white">{player.parent_name}</div>
-                <div className="text-xs text-gray-500">{player.parent_phone}</div>
-              </TableCell>
-              <TableCell className="text-sm">{formatDate(player.enrolled_date)}</TableCell>
-              <TableCell>
-                <Badge
-                  variant={
-                    player.status === 'active'
-                      ? 'success'
-                      : player.status === 'dropped'
-                        ? 'danger'
-                        : 'warning'
-                  }
-                >
-                  {player.status === 'active' ? 'Active' : player.status === 'dropped' ? 'Dropped' : 'Inactive'}
-                </Badge>
-              </TableCell>
-              <TableCell className="text-right">
-                <div className="flex justify-end gap-1">
-                  {onEdit && (
-                    <Button variant="ghost" size="sm" className="w-8 h-8 p-0" onClick={() => onEdit(player)}>
-                      <Edit2 className="w-4 h-4 text-gray-500" />
-                    </Button>
-                  )}
-                  {onDelete && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="w-8 h-8 p-0 text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
-                      onClick={() => onDelete(player)}
-                      title={player.status === 'dropped' ? 'Permanently Delete' : 'Drop Player'}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  )}
+                <div>
+                  <div className="font-medium text-gray-900 dark:text-white">{player.full_name}</div>
+                  <div className="text-xs text-gray-500">{calculateAge(player.date_of_birth)} yrs</div>
                 </div>
-              </TableCell>
+              </div>
+              <Badge
+                variant={
+                  player.status === 'active'
+                    ? 'success'
+                    : player.status === 'dropped'
+                      ? 'danger'
+                      : 'warning'
+                }
+              >
+                {player.status === 'active' ? 'Active' : player.status === 'dropped' ? 'Dropped' : 'Inactive'}
+              </Badge>
+            </div>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-gray-500 dark:text-gray-400">{player.branches?.name || 'Unassigned'}</span>
+              <span className="text-gray-500 dark:text-gray-400">Enrolled {formatDate(player.enrolled_date)}</span>
+            </div>
+            <div className="flex items-center justify-between text-sm">
+              <div>
+                <span className="text-gray-900 dark:text-white font-medium">{player.parent_name}</span>
+                <span className="text-gray-500 ml-2">{player.parent_phone}</span>
+              </div>
+              <div className="flex gap-1">
+                {onEdit && (
+                  <Button variant="ghost" size="sm" className="w-8 h-8 p-0" onClick={() => onEdit(player)}>
+                    <Edit2 className="w-4 h-4 text-gray-500" />
+                  </Button>
+                )}
+                {onDelete && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="w-8 h-8 p-0 text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+                    onClick={() => onDelete(player)}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Desktop table view */}
+      <div className="hidden md:block">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Player</TableHead>
+              <TableHead>Age</TableHead>
+              <TableHead>Branch</TableHead>
+              <TableHead>Parent / Contact</TableHead>
+              <TableHead>Enrolled</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
             </TableRow>
-          ))
-        )}
-      </TableBody>
-    </Table>
+          </TableHeader>
+          <TableBody>
+            {players.map((player) => (
+              <TableRow key={player.id}>
+                <TableCell>
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center justify-center w-9 h-9 rounded-full bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 shrink-0">
+                      <UserCircle2 className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="font-medium text-gray-900 dark:text-white">{player.full_name}</div>
+                      <div className="text-xs text-gray-500">{formatDate(player.date_of_birth)}</div>
+                    </div>
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <span className="font-medium">{calculateAge(player.date_of_birth)}</span>
+                  <span className="text-gray-500 text-xs ml-1">yrs</span>
+                </TableCell>
+                <TableCell>
+                  <span className="text-sm">{player.branches?.name || 'Unassigned'}</span>
+                </TableCell>
+                <TableCell>
+                  <div className="text-sm font-medium text-gray-900 dark:text-white">{player.parent_name}</div>
+                  <div className="text-xs text-gray-500">{player.parent_phone}</div>
+                </TableCell>
+                <TableCell className="text-sm">{formatDate(player.enrolled_date)}</TableCell>
+                <TableCell>
+                  <Badge
+                    variant={
+                      player.status === 'active'
+                        ? 'success'
+                        : player.status === 'dropped'
+                          ? 'danger'
+                          : 'warning'
+                    }
+                  >
+                    {player.status === 'active' ? 'Active' : player.status === 'dropped' ? 'Dropped' : 'Inactive'}
+                  </Badge>
+                </TableCell>
+                <TableCell className="text-right">
+                  <div className="flex justify-end gap-1">
+                    {onEdit && (
+                      <Button variant="ghost" size="sm" className="w-8 h-8 p-0" onClick={() => onEdit(player)}>
+                        <Edit2 className="w-4 h-4 text-gray-500" />
+                      </Button>
+                    )}
+                    {onDelete && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="w-8 h-8 p-0 text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+                        onClick={() => onDelete(player)}
+                        title={player.status === 'dropped' ? 'Permanently Delete' : 'Drop Player'}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    )}
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    </>
   );
 });

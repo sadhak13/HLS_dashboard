@@ -4,7 +4,7 @@ import React from 'react';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
-import { CheckCircle, Clock } from 'lucide-react';
+import { CheckCircle } from 'lucide-react';
 
 interface FeeRecord {
   id: string;
@@ -51,93 +51,157 @@ export const FeeTable = React.memo(function FeeTable({ fees, isLoading, onMarkPa
     );
   }
 
+  if (fees.length === 0) {
+    return (
+      <div className="text-center py-8 text-gray-500">
+        No fee records found.
+      </div>
+    );
+  }
+
   return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>Player</TableHead>
-          <TableHead>Branch</TableHead>
-          <TableHead>Month</TableHead>
-          <TableHead>Amount</TableHead>
-          <TableHead>Status</TableHead>
-          <TableHead>Payment Mode</TableHead>
-          <TableHead>Paid On</TableHead>
-          <TableHead className="text-right">Actions</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {fees.length === 0 ? (
-          <TableRow>
-            <TableCell colSpan={8} className="text-center py-8 text-gray-500">
-              No fee records found.
-            </TableCell>
-          </TableRow>
-        ) : (
-          fees.map((fee) => {
-            const cfg = statusConfig[fee.status];
-            return (
-              <TableRow key={fee.id}>
-                <TableCell>
-                  <span className="font-medium text-gray-900 dark:text-white">
-                    {fee.players?.full_name ?? 'Unknown'}
+    <>
+      {/* Mobile card view */}
+      <div className="md:hidden divide-y divide-gray-200 dark:divide-gray-700">
+        {fees.map((fee) => {
+          const cfg = statusConfig[fee.status];
+          return (
+            <div key={fee.id} className="p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="font-medium text-gray-900 dark:text-white">
+                  {fee.players?.full_name ?? 'Unknown'}
+                </span>
+                <Badge variant={cfg.variant}>{cfg.label}</Badge>
+              </div>
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-gray-500 dark:text-gray-400">{fee.branches?.name ?? '—'}</span>
+                <span className="font-semibold text-gray-900 dark:text-white">
+                  ₹{fee.amount.toLocaleString('en-IN')}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-sm text-gray-500 dark:text-gray-400">
+                <span>{formatMonth(fee.month)}</span>
+                {fee.mode_of_payment && (
+                  <span className="inline-block px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
+                    {fee.mode_of_payment === 'cash+online' ? 'Cash + Online' : fee.mode_of_payment === 'online' ? 'Online' : 'Cash'}
                   </span>
-                </TableCell>
-                <TableCell className="text-sm text-gray-600 dark:text-gray-400">
-                  {fee.branches?.name ?? '—'}
-                </TableCell>
-                <TableCell className="text-sm">{formatMonth(fee.month)}</TableCell>
-                <TableCell>
-                  <span className="font-semibold text-gray-900 dark:text-white">
-                    ₹{fee.amount.toLocaleString('en-IN')}
-                  </span>
-                </TableCell>
-                <TableCell>
-                  <Badge variant={cfg.variant}>{cfg.label}</Badge>
-                </TableCell>
-                <TableCell className="text-sm text-gray-600 dark:text-gray-400">
-                  {fee.mode_of_payment ? (
-                    <span className="inline-block px-2 py-1 rounded text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
-                      {fee.mode_of_payment === 'cash+online' ? 'Cash + Online' : fee.mode_of_payment === 'online' ? 'Online' : 'Cash'}
+                )}
+              </div>
+              {fee.paid_date && (
+                <div className="text-xs text-gray-500 dark:text-gray-400">
+                  Paid on {new Date(fee.paid_date).toLocaleDateString('en-IN')}
+                </div>
+              )}
+              <div className="flex gap-2 pt-1">
+                {onEdit && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                    onClick={() => onEdit(fee)}
+                  >
+                    Edit
+                  </Button>
+                )}
+                {fee.status !== 'paid' && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-green-600 hover:text-green-700 hover:bg-green-50 dark:hover:bg-green-900/20 gap-1.5"
+                    onClick={() => onMarkPaid(fee.id)}
+                  >
+                    <CheckCircle className="w-4 h-4" />
+                    Mark Paid
+                  </Button>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Desktop table view */}
+      <div className="hidden md:block">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Player</TableHead>
+              <TableHead>Branch</TableHead>
+              <TableHead>Month</TableHead>
+              <TableHead>Amount</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead>Payment Mode</TableHead>
+              <TableHead>Paid On</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {fees.map((fee) => {
+              const cfg = statusConfig[fee.status];
+              return (
+                <TableRow key={fee.id}>
+                  <TableCell>
+                    <span className="font-medium text-gray-900 dark:text-white">
+                      {fee.players?.full_name ?? 'Unknown'}
                     </span>
-                  ) : (
-                    '—'
-                  )}
-                </TableCell>
-                <TableCell className="text-sm text-gray-500">
-                  {fee.paid_date
-                    ? new Date(fee.paid_date).toLocaleDateString('en-IN')
-                    : '—'}
-                </TableCell>
-                <TableCell className="text-right">
-                  <div className="flex justify-end gap-2">
-                    {onEdit && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-900/20"
-                        onClick={() => onEdit(fee)}
-                      >
-                        Edit
-                      </Button>
+                  </TableCell>
+                  <TableCell className="text-sm text-gray-600 dark:text-gray-400">
+                    {fee.branches?.name ?? '—'}
+                  </TableCell>
+                  <TableCell className="text-sm">{formatMonth(fee.month)}</TableCell>
+                  <TableCell>
+                    <span className="font-semibold text-gray-900 dark:text-white">
+                      ₹{fee.amount.toLocaleString('en-IN')}
+                    </span>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant={cfg.variant}>{cfg.label}</Badge>
+                  </TableCell>
+                  <TableCell className="text-sm text-gray-600 dark:text-gray-400">
+                    {fee.mode_of_payment ? (
+                      <span className="inline-block px-2 py-1 rounded text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
+                        {fee.mode_of_payment === 'cash+online' ? 'Cash + Online' : fee.mode_of_payment === 'online' ? 'Online' : 'Cash'}
+                      </span>
+                    ) : (
+                      '—'
                     )}
-                    {fee.status !== 'paid' && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-green-600 hover:text-green-700 hover:bg-green-50 dark:hover:bg-green-900/20 gap-1.5"
-                        onClick={() => onMarkPaid(fee.id)}
-                      >
-                        <CheckCircle className="w-4 h-4" />
-                        Mark Paid
-                      </Button>
-                    )}
-                  </div>
-                </TableCell>
-              </TableRow>
-            );
-          })
-        )}
-      </TableBody>
-    </Table>
+                  </TableCell>
+                  <TableCell className="text-sm text-gray-500">
+                    {fee.paid_date
+                      ? new Date(fee.paid_date).toLocaleDateString('en-IN')
+                      : '—'}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex justify-end gap-2">
+                      {onEdit && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                          onClick={() => onEdit(fee)}
+                        >
+                          Edit
+                        </Button>
+                      )}
+                      {fee.status !== 'paid' && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-green-600 hover:text-green-700 hover:bg-green-50 dark:hover:bg-green-900/20 gap-1.5"
+                          onClick={() => onMarkPaid(fee.id)}
+                        >
+                          <CheckCircle className="w-4 h-4" />
+                          Mark Paid
+                        </Button>
+                      )}
+                    </div>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </div>
+    </>
   );
 });
