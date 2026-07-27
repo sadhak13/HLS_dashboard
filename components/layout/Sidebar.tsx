@@ -20,25 +20,25 @@ export function Sidebar({ isOpen, setIsOpen }: { isOpen: boolean; setIsOpen: (va
     <>
       {/* Mobile overlay */}
       {isOpen && (
-        <div 
+        <div
           className="fixed inset-0 z-40 bg-gray-900/80 lg:hidden"
           onClick={() => setIsOpen(false)}
         />
       )}
 
       {/* Sidebar */}
-      <aside 
-        className={`fixed inset-y-0 left-0 z-50 w-64 bg-black/40 backdrop-blur-xl border-r border-white/[0.07] text-white shadow-2xl transition-transform duration-300 ease-in-out lg:static lg:translate-x-0 ${
+      <aside
+        className={`fixed inset-y-0 left-0 z-50 w-64 bg-black/40 backdrop-blur-xl border-r border-white/[0.07] shadow-2xl transition-all duration-300 ease-in-out lg:static lg:translate-x-0 ${
           isOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
         <div className="flex h-16 items-center justify-center border-b border-white/[0.07] bg-black/20">
           <div className="flex items-center gap-3 font-bold text-lg text-white">
-            <Image 
-              src="/HLS_logo.png" 
-              alt="HLS Soccer Academy Logo" 
-              width={32} 
-              height={32} 
+            <Image
+              src="/HLS_logo.png"
+              alt="HLS Soccer Academy Logo"
+              width={32}
+              height={32}
               className="object-contain"
             />
             <span className="truncate max-w-[140px]">HLS Admin</span>
@@ -52,13 +52,13 @@ export function Sidebar({ isOpen, setIsOpen }: { isOpen: boolean; setIsOpen: (va
               const Icon = item.icon;
               return (
                 <li key={item.name}>
-                  <Link 
+                  <Link
                     href={item.href}
                     onClick={() => setIsOpen(false)}
                     className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
-                      isActive 
-                        ? 'bg-green-600 text-white' 
-                        : 'text-gray-400 hover:text-white hover:bg-gray-800'
+                      isActive
+                        ? 'bg-green-600 text-white'
+                        : 'text-gray-400 hover:text-white hover:bg-white/10'
                     }`}
                   >
                     <Icon className="w-5 h-5" />

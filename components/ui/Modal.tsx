@@ -2,6 +2,7 @@
 
 import React, { useEffect } from 'react';
 import { X } from 'lucide-react';
+import { useTheme } from '@/context/ThemeContext';
 
 interface ModalProps {
   isOpen: boolean;
@@ -12,6 +13,8 @@ interface ModalProps {
 }
 
 export function Modal({ isOpen, onClose, title, children, maxWidth = 'md' }: ModalProps) {
+  const { theme } = useTheme();
+
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden';
@@ -32,6 +35,18 @@ export function Modal({ isOpen, onClose, title, children, maxWidth = 'md' }: Mod
     xl: 'max-w-xl',
   };
 
+  const modalStyle = theme === 'dark'
+    ? {
+        background: 'linear-gradient(135deg, rgba(15,23,42,0.95) 0%, rgba(2,8,23,0.98) 100%)',
+        backdropFilter: 'blur(32px)',
+        boxShadow: '0 25px 50px -12px rgba(0,0,0,0.8), 0 0 0 1px rgba(255,255,255,0.05), inset 0 1px 0 rgba(255,255,255,0.08)',
+      }
+    : {
+        background: '#ffffff',
+        backdropFilter: 'blur(32px)',
+        boxShadow: '0 25px 50px -12px rgba(0,0,0,0.15), 0 0 0 1px rgba(0,0,0,0.05)',
+      };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto overflow-x-hidden p-4">
       {/* Backdrop */}
@@ -42,12 +57,9 @@ export function Modal({ isOpen, onClose, title, children, maxWidth = 'md' }: Mod
 
       {/* Modal */}
       <div className={`relative w-full ${maxWidthClasses[maxWidth]} mx-auto z-50 animate-in fade-in zoom-in-95 duration-200`}>
-        <div className="relative flex flex-col w-full rounded-2xl overflow-hidden shadow-2xl border border-white/10"
-          style={{
-            background: 'linear-gradient(135deg, rgba(15,23,42,0.95) 0%, rgba(2,8,23,0.98) 100%)',
-            backdropFilter: 'blur(32px)',
-            boxShadow: '0 25px 50px -12px rgba(0,0,0,0.8), 0 0 0 1px rgba(255,255,255,0.05), inset 0 1px 0 rgba(255,255,255,0.08)',
-          }}
+        <div
+          className="relative flex flex-col w-full rounded-2xl overflow-hidden shadow-2xl border border-white/10"
+          style={modalStyle}
         >
           {/* Top accent line */}
           <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-green-500/60 to-transparent" />

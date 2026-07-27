@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+@custom-variant light (&:where(.light, .light *));
+
 @theme {
   --color-green-50: #f0fdf4;
   --color-green-100: #dcfce7;
@@ -20,16 +23,15 @@
     --foreground: #111827;
   }
 
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --background: #030712;
-      --foreground: #f9fafb;
-    }
+  .dark {
+    --background: #030712;
+    --foreground: #f9fafb;
   }
 
   body {
     background-color: var(--background);
     color: var(--foreground);
+    transition: background-color 0.3s ease, color 0.3s ease;
   }
 
   /* Custom Scrollbar */
@@ -41,13 +43,24 @@
     background: transparent;
   }
 
-  .scrollbar-thin::-webkit-scrollbar-thumb {
+  .dark .scrollbar-thin::-webkit-scrollbar-thumb {
     background: rgba(255, 255, 255, 0.1);
-    border-radius: 3px;
   }
 
-  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  .dark .scrollbar-thin::-webkit-scrollbar-thumb:hover {
     background: rgba(255, 255, 255, 0.2);
+  }
+
+  .light .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.15);
+  }
+
+  .light .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 0, 0, 0.25);
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    border-radius: 3px;
   }
 
   /* Firefox */
@@ -55,4 +68,500 @@
     scrollbar-width: thin;
     scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
   }
+
+  .light .scrollbar-thin {
+    scrollbar-color: rgba(0, 0, 0, 0.15) transparent;
+  }
+}
+
+/* ============================================================
+   LIGHT THEME OVERRIDES
+   Strategy: Sidebar stays dark. Only the main content area
+   switches to light. Uses !important to beat Tailwind utilities.
+   ============================================================ */
+
+/* Main content area background — only the layout shell (admin/coach),
+   NOT the login page or other standalone pages */
+.light [data-layout="shell"] {
+  background-image: none !important;
+  background-color: #f4f6f9 !important;
+  transition: background-color 0.3s ease;
+}
+
+/* Keep sidebar dark in light mode — opaque background, no backdrop-blur interference */
+.light aside {
+  background-color: #0f172a !important;
+  border-color: rgba(255, 255, 255, 0.07) !important;
+  backdrop-filter: none !important;
+}
+
+.light aside .text-white,
+.light aside .font-bold,
+.light aside span {
+  color: #ffffff !important;
+}
+
+.light aside .text-gray-400 {
+  color: #94a3b8 !important;
+}
+
+.light aside .bg-black\/20 {
+  background-color: rgba(0, 0, 0, 0.3) !important;
+}
+
+.light aside .border-white\/\[0\.07\] {
+  border-color: rgba(255, 255, 255, 0.07) !important;
+}
+
+/* Sidebar — ensure hover/bg utilities stay as-is (dark context) */
+.light aside a:hover {
+  background-color: rgba(255, 255, 255, 0.08) !important;
+  color: #ffffff !important;
+}
+
+.light aside a.bg-green-600,
+.light aside a.bg-green-600:hover {
+  background-color: #16a34a !important;
+  color: #ffffff !important;
+}
+
+/* Reset any bg-white leaking into sidebar */
+.light aside .bg-white\/10,
+.light aside .bg-white\/5 {
+  background-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+/* TopBar — clean white with bottom shadow */
+.light header.sticky {
+  background-color: #ffffff !important;
+  border-color: transparent !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05) !important;
+  backdrop-filter: none !important;
+}
+
+.light header.sticky .text-gray-400 {
+  color: #6b7280 !important;
+}
+
+.light header.sticky .hover\:bg-white\/10:hover {
+  background-color: #f3f4f6 !important;
+}
+
+/* Cards — crisp white with soft shadows and subtle left accent */
+.light main .bg-white\/\[0\.03\] {
+  background-color: #ffffff !important;
+  border-color: #e8eaed !important;
+  border-left: 3px solid #22c55e !important;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06), 0 1px 4px rgba(0, 0, 0, 0.03) !important;
+  backdrop-filter: none !important;
+  transition: box-shadow 0.2s ease, transform 0.2s ease !important;
+}
+
+.light main .bg-white\/\[0\.03\]:hover {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1), 0 2px 6px rgba(0, 0, 0, 0.04) !important;
+  transform: translateY(-1px);
+}
+
+.light main .backdrop-blur-xl,
+.light main .backdrop-blur-2xl {
+  backdrop-filter: none !important;
+}
+
+/* Subtle background panels */
+.light main .bg-white\/\[0\.05\] {
+  background-color: #f8f9fa !important;
+}
+
+.light main .bg-white\/5 {
+  background-color: #f3f4f6 !important;
+}
+
+.light main .bg-white\/10 {
+  background-color: #f0f1f3 !important;
+}
+
+.light main .bg-white\/\[0\.02\] {
+  background-color: #f9fafb !important;
+}
+
+.light main .bg-white\/\[0\.06\] {
+  background-color: #f3f4f6 !important;
+}
+
+/* Borders in content area */
+.light main .border-white\/\[0\.07\] {
+  border-color: #e5e7eb !important;
+}
+
+.light main .border-white\/10 {
+  border-color: #e5e7eb !important;
+}
+
+.light main .border-white\/5 {
+  border-color: #f0f1f3 !important;
+}
+
+.light main .border-white\/20 {
+  border-color: #d1d5db !important;
+}
+
+/* Text — Strong contrast like the references */
+.light main .text-white {
+  color: #1a1a2e !important;
+}
+
+.light main .text-gray-300 {
+  color: #4b5563 !important;
+}
+
+.light main .text-gray-400 {
+  color: #6b7280 !important;
+}
+
+.light main .text-gray-500 {
+  color: #6b7280 !important;
+}
+
+/* Preserve white text on colored backgrounds */
+.light main .bg-green-600,
+.light main .bg-green-600 *,
+.light main .bg-green-500,
+.light main .bg-green-500 *,
+.light main .bg-red-500,
+.light main .bg-red-500 *,
+.light main .bg-red-600,
+.light main .bg-red-600 *,
+.light main .bg-blue-600,
+.light main .bg-blue-600 * {
+  color: #ffffff !important;
+}
+
+/* Hover states */
+.light main .hover\:bg-white\/10:hover {
+  background-color: #f0f1f3 !important;
+}
+
+.light main .hover\:bg-white\/5:hover {
+  background-color: #f5f6f8 !important;
+}
+
+.light main .hover\:bg-white\/\[0\.02\]:hover {
+  background-color: #f5f6f8 !important;
+}
+
+/* Dividers */
+.light main .divide-white\/5 > :not(:first-child) {
+  border-color: #f0f1f3 !important;
+}
+
+.light main .divide-white\/10 > :not(:first-child) {
+  border-color: #e5e7eb !important;
+}
+
+/* Forms — clean visible inputs */
+.light main select,
+.light main input[type="text"],
+.light main input[type="email"],
+.light main input[type="tel"],
+.light main input[type="number"],
+.light main input[type="password"],
+.light main input[type="search"],
+.light main textarea {
+  background-color: #ffffff !important;
+  border: 1px solid #d1d5db !important;
+  color: #1a1a2e !important;
+  border-radius: 0.75rem;
+}
+
+.light main select:focus,
+.light main input:focus,
+.light main textarea:focus {
+  border-color: #22c55e !important;
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.1) !important;
+}
+
+.light main input::placeholder,
+.light main textarea::placeholder {
+  color: #9ca3af !important;
+}
+
+.light main select option {
+  background-color: #ffffff !important;
+  color: #1a1a2e !important;
+}
+
+/* Status badge / icon backgrounds — slightly more vivid in light */
+.light main .bg-green-500\/10 {
+  background-color: rgba(34, 197, 94, 0.1) !important;
+}
+
+.light main .bg-amber-500\/10 {
+  background-color: rgba(245, 158, 11, 0.1) !important;
+}
+
+.light main .bg-blue-500\/10 {
+  background-color: rgba(59, 130, 246, 0.1) !important;
+}
+
+.light main .bg-red-500\/10 {
+  background-color: rgba(239, 68, 68, 0.1) !important;
+}
+
+.light main .bg-green-500\/20 {
+  background-color: rgba(34, 197, 94, 0.1) !important;
+}
+
+.light main .bg-amber-500\/20 {
+  background-color: rgba(245, 158, 11, 0.1) !important;
+}
+
+.light main .bg-red-500\/20 {
+  background-color: rgba(239, 68, 68, 0.1) !important;
+}
+
+/* Status badge borders */
+.light main .border-green-500\/20,
+.light main .border-green-500\/30 {
+  border-color: rgba(34, 197, 94, 0.25) !important;
+}
+
+.light main .border-amber-500\/20,
+.light main .border-amber-500\/30 {
+  border-color: rgba(245, 158, 11, 0.25) !important;
+}
+
+.light main .border-red-500\/20,
+.light main .border-red-500\/30 {
+  border-color: rgba(239, 68, 68, 0.25) !important;
+}
+
+.light main .border-blue-500\/20,
+.light main .border-blue-500\/30 {
+  border-color: rgba(59, 130, 246, 0.25) !important;
+}
+
+/* Colored text — stays vivid in light mode */
+.light main .text-green-400,
+.light main .text-green-500 {
+  color: #16a34a !important;
+}
+
+.light main .text-amber-400,
+.light main .text-amber-500 {
+  color: #d97706 !important;
+}
+
+.light main .text-blue-400,
+.light main .text-blue-500 {
+  color: #2563eb !important;
+}
+
+.light main .text-red-400,
+.light main .text-red-500 {
+  color: #dc2626 !important;
+}
+
+.light main .text-emerald-500 {
+  color: #059669 !important;
+}
+
+.light main .text-purple-500 {
+  color: #7c3aed !important;
+}
+
+.light main .text-cyan-500 {
+  color: #0891b2 !important;
+}
+
+.light main .text-teal-500 {
+  color: #0d9488 !important;
+}
+
+/* SVG fills for charts */
+.light main .fill-white {
+  fill: #1a1a2e !important;
+}
+
+.light main .fill-gray-400 {
+  fill: #6b7280 !important;
+}
+
+/* Chart grid */
+.light .recharts-cartesian-grid line {
+  stroke: rgba(0, 0, 0, 0.06) !important;
+}
+
+/* Shadows — clean card shadows */
+.light main .shadow-2xl {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0, 0, 0, 0.04) !important;
+}
+
+.light main .shadow-xl {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0, 0, 0, 0.04) !important;
+}
+
+.light main .shadow-lg {
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05) !important;
+}
+
+/* Accent shadows */
+.light main .shadow-green-500\/30,
+.light main .shadow-green-500\/50,
+.light main .shadow-green-500\/25 {
+  --tw-shadow-color: rgba(34, 197, 94, 0.15) !important;
+}
+
+/* Modal — keep scoped to fixed overlay (not inside main) */
+.light .fixed .bg-black\/60 {
+  background-color: rgba(0, 0, 0, 0.3) !important;
+}
+
+.light .fixed .border-white\/10 {
+  border-color: #e5e7eb !important;
+}
+
+.light .fixed .border-white\/\[0\.07\] {
+  border-color: #e5e7eb !important;
+}
+
+.light .fixed .text-white {
+  color: #1a1a2e !important;
+}
+
+.light .fixed .text-gray-400 {
+  color: #6b7280 !important;
+}
+
+.light .fixed .text-gray-300 {
+  color: #4b5563 !important;
+}
+
+.light .fixed .bg-white\/5 {
+  background-color: #f3f4f6 !important;
+}
+
+.light .fixed .bg-white\/10 {
+  background-color: #f0f1f3 !important;
+}
+
+.light .fixed .hover\:bg-white\/10:hover {
+  background-color: #f0f1f3 !important;
+}
+
+.light .fixed .bg-green-600,
+.light .fixed .bg-green-600 * {
+  color: #ffffff !important;
+}
+
+/* Mobile sidebar overlay */
+.light .bg-gray-900\/80 {
+  background-color: rgba(0, 0, 0, 0.5) !important;
+}
+
+/* UserDropdown in header */
+.light header .text-white {
+  color: #1a1a2e !important;
+}
+
+/* User dropdown menu */
+.light .bg-white {
+  background-color: #ffffff !important;
+}
+
+/* Progress bar track */
+.light main .bg-white\/\[0\.06\] {
+  background-color: #e5e7eb !important;
+}
+
+/* Theme Toggle Animation */
+.theme-switch {
+  font-size: 14px;
+  position: relative;
+  display: inline-block;
+  width: 3.6em;
+  height: 2em;
+  border-radius: 30px;
+  flex-shrink: 0;
+}
+
+.theme-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.theme-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #2a2a2a;
+  transition: 0.4s;
+  border-radius: 30px;
+  overflow: hidden;
+}
+
+.theme-slider:before {
+  position: absolute;
+  content: "";
+  height: 1.2em;
+  width: 1.2em;
+  border-radius: 20px;
+  left: 0.4em;
+  bottom: 0.4em;
+  transition: 0.4s;
+  transition-timing-function: cubic-bezier(0.81, -0.04, 0.38, 1.5);
+  box-shadow: inset 8px -4px 0px 0px #fff;
+}
+
+.theme-switch input:checked + .theme-slider {
+  background-color: #00a6ff;
+}
+
+.theme-switch input:checked + .theme-slider:before {
+  transform: translateX(1.6em);
+  box-shadow: inset 15px -4px 0px 15px #ffcf48;
+}
+
+.theme-star {
+  background-color: #fff;
+  border-radius: 50%;
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  transition: all 0.4s;
+}
+
+.theme-star-1 {
+  left: 2.2em;
+  top: 0.4em;
+}
+
+.theme-star-2 {
+  left: 1.9em;
+  top: 1.1em;
+}
+
+.theme-star-3 {
+  left: 2.7em;
+  top: 0.8em;
+}
+
+.theme-switch input:checked ~ .theme-slider .theme-star {
+  opacity: 0;
+}
+
+.theme-cloud {
+  width: 3em;
+  position: absolute;
+  bottom: -1.2em;
+  left: -0.9em;
+  opacity: 0;
+  transition: all 0.4s;
+}
+
+.theme-switch input:checked ~ .theme-slider .theme-cloud {
+  opacity: 1;
 }

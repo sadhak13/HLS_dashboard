@@ -28,7 +28,7 @@ export function CoachSidebar({ isOpen, setIsOpen }: { isOpen: boolean; setIsOpen
 
       {/* Sidebar */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-64 bg-black/40 backdrop-blur-xl border-r border-white/[0.07] text-white shadow-2xl transition-transform duration-300 ease-in-out lg:static lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-50 w-64 bg-black/40 backdrop-blur-xl border-r border-white/[0.07] shadow-2xl transition-all duration-300 ease-in-out lg:static lg:translate-x-0 ${
           isOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
@@ -58,7 +58,7 @@ export function CoachSidebar({ isOpen, setIsOpen }: { isOpen: boolean; setIsOpen
                     className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
                       isActive
                         ? 'bg-green-600 text-white'
-                        : 'text-gray-400 hover:text-white hover:bg-gray-800'
+                        : 'text-gray-400 hover:text-white hover:bg-white/10'
                     }`}
                   >
                     <Icon className="w-5 h-5" />

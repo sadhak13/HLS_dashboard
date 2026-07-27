@@ -8,6 +8,7 @@ import { Users, MapPin, IndianRupee, Activity, UserPlus, AlertCircle, TrendingUp
 import { createClient } from '@/lib/supabase/client';
 import { formatDistanceToNow, parseISO, format, eachMonthOfInterval } from 'date-fns';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Sector } from 'recharts';
+import { useTheme } from '@/context/ThemeContext';
 
 type ActivityItem = {
   id: string;
@@ -34,6 +35,7 @@ interface DashboardClientProps {
 }
 
 export function DashboardClient({ branchesMap, initialBranchesCount }: DashboardClientProps) {
+  const { theme } = useTheme();
   const [period, setPeriod] = useState<PeriodRange>(getDefaultPeriod);
   const [playersCount, setPlayersCount] = useState(0);
   const [branchesCount, setBranchesCount] = useState(initialBranchesCount);
@@ -299,28 +301,29 @@ export function DashboardClient({ branchesMap, initialBranchesCount }: Dashboard
               {chartData.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={chartData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.1)" />
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={theme === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)'} />
                     <XAxis
                       dataKey="name"
                       axisLine={false}
                       tickLine={false}
-                      tick={{ fontSize: 12, fill: '#9ca3af' }}
+                      tick={{ fontSize: 12, fill: theme === 'dark' ? '#9ca3af' : '#6b7280' }}
                       dy={10}
                     />
                     <YAxis
                       axisLine={false}
                       tickLine={false}
-                      tick={{ fontSize: 12, fill: '#9ca3af' }}
+                      tick={{ fontSize: 12, fill: theme === 'dark' ? '#9ca3af' : '#6b7280' }}
                       tickFormatter={(val) => `₹${val >= 1000 ? `${(val / 1000).toFixed(0)}k` : val}`}
                     />
                     <Tooltip
-                      cursor={{ fill: 'rgba(255,255,255,0.05)' }}
+                      cursor={{ fill: theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)' }}
                       contentStyle={{
                         borderRadius: '12px',
-                        border: '1px solid rgba(255,255,255,0.1)',
-                        backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                        border: theme === 'dark' ? '1px solid rgba(255,255,255,0.1)' : '1px solid #e5e7eb',
+                        backgroundColor: theme === 'dark' ? 'rgba(15, 23, 42, 0.9)' : '#ffffff',
                         backdropFilter: 'blur(12px)',
-                        color: '#fff',
+                        color: theme === 'dark' ? '#fff' : '#1a1a2e',
+                        boxShadow: theme === 'dark' ? undefined : '0 4px 12px rgba(0,0,0,0.1)',
                       }}
                       formatter={(value: any) => [`₹${Number(value || 0).toLocaleString('en-IN')}`, 'Revenue']}
                     />
@@ -446,20 +449,20 @@ export function DashboardClient({ branchesMap, initialBranchesCount }: Dashboard
                     ))}
                   </Pie>
                   {/* Center label */}
-                  <text x="50%" y="47%" textAnchor="middle" dominantBaseline="middle" className="fill-white" style={{ fontSize: '28px', fontWeight: 700 }}>
+                  <text x="50%" y="47%" textAnchor="middle" dominantBaseline="middle" style={{ fontSize: '28px', fontWeight: 700, fill: theme === 'dark' ? '#ffffff' : '#1a1a2e' }}>
                     {branchDistribution.reduce((s, b) => s + b.value, 0)}
                   </text>
-                  <text x="50%" y="57%" textAnchor="middle" dominantBaseline="middle" className="fill-gray-400" style={{ fontSize: '11px' }}>
+                  <text x="50%" y="57%" textAnchor="middle" dominantBaseline="middle" style={{ fontSize: '11px', fill: theme === 'dark' ? '#9ca3af' : '#6b7280' }}>
                     students
                   </text>
                   <Tooltip
                     contentStyle={{
                       borderRadius: '12px',
-                      border: '1px solid rgba(255,255,255,0.1)',
-                      backgroundColor: 'rgba(15, 23, 42, 0.95)',
+                      border: theme === 'dark' ? '1px solid rgba(255,255,255,0.1)' : '1px solid #e5e7eb',
+                      backgroundColor: theme === 'dark' ? 'rgba(15, 23, 42, 0.95)' : '#ffffff',
                       backdropFilter: 'blur(12px)',
-                      color: '#fff',
-                      boxShadow: '0 20px 40px rgba(0,0,0,0.4)',
+                      color: theme === 'dark' ? '#fff' : '#1a1a2e',
+                      boxShadow: theme === 'dark' ? '0 20px 40px rgba(0,0,0,0.4)' : '0 4px 12px rgba(0,0,0,0.1)',
                       padding: '10px 14px',
                     }}
                     formatter={(value: any, name: any) => [`${value} students`, name]}
@@ -490,7 +493,7 @@ export function DashboardClient({ branchesMap, initialBranchesCount }: Dashboard
                       className="w-2.5 h-2.5 rounded-full shrink-0"
                       style={{ backgroundColor: PIE_COLORS[i % PIE_COLORS.length] }}
                     />
-                    <span className="text-gray-300 font-medium">{branch.name}</span>
+                    <span className="text-gray-400 font-medium">{branch.name}</span>
                     <span className="text-gray-500">{pct}%</span>
                   </button>
                 );
