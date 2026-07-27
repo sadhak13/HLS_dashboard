@@ -62,6 +62,7 @@ export function AddPlayerModal({ isOpen, onClose, onSuccess, editingPlayer }: Ad
   const [enrolledDate, setEnrolledDate] = useState('')
   const [aadharNumber, setAadharNumber] = useState('')
 
+  // Fetch branches/batches when modal opens
   useEffect(() => {
     if (isOpen && profile) {
       const fetchData = async () => {
@@ -70,7 +71,6 @@ export function AddPlayerModal({ isOpen, onClose, onSuccess, editingPlayer }: Ad
             const { data: branchData } = await supabase.from('branches').select('id, name').order('name')
             if (branchData) setBranches(branchData)
           } else {
-            // Coach: resolve branches via coach_batches
             const coachBranches = await getCoachBranches(profile.id)
             if (coachBranches.length > 1) {
               setBranches(coachBranches)
@@ -93,33 +93,38 @@ export function AddPlayerModal({ isOpen, onClose, onSuccess, editingPlayer }: Ad
       }
 
       fetchData()
-
-      if (editingPlayer) {
-        setFullName(editingPlayer.full_name)
-        setDob(editingPlayer.date_of_birth || '')
-        setGender((editingPlayer.gender as 'male' | 'female') || 'male')
-        setParentName(editingPlayer.parent_name || '')
-        setParentPhone(editingPlayer.parent_phone || '')
-        setBranchId(editingPlayer.branch_id || '')
-        setBatchId(editingPlayer.batch_id || '')
-        setStatus((editingPlayer.status as any) || 'active')
-        setEnrolledDate(editingPlayer.enrolled_date || '')
-        setAadharNumber(editingPlayer.aadhar_number || '')
-      } else {
-        setFullName('')
-        setDob('')
-        setGender('male')
-        setParentName('')
-        setParentPhone('')
-        if (isAdmin) setBranchId('')
-        setBatchId('')
-        setStatus('active')
-        setEnrolledDate(new Date().toISOString().split('T')[0])
-        setAadharNumber('')
-      }
-      setError('')
     }
-  }, [isOpen, profile, editingPlayer]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isOpen]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Initialize form fields only when modal opens or editingPlayer changes — NOT on profile refresh
+  useEffect(() => {
+    if (!isOpen) return
+
+    if (editingPlayer) {
+      setFullName(editingPlayer.full_name)
+      setDob(editingPlayer.date_of_birth || '')
+      setGender((editingPlayer.gender as 'male' | 'female') || 'male')
+      setParentName(editingPlayer.parent_name || '')
+      setParentPhone(editingPlayer.parent_phone || '')
+      setBranchId(editingPlayer.branch_id || '')
+      setBatchId(editingPlayer.batch_id || '')
+      setStatus((editingPlayer.status as any) || 'active')
+      setEnrolledDate(editingPlayer.enrolled_date || '')
+      setAadharNumber(editingPlayer.aadhar_number || '')
+    } else {
+      setFullName('')
+      setDob('')
+      setGender('male')
+      setParentName('')
+      setParentPhone('')
+      if (isAdmin) setBranchId('')
+      setBatchId('')
+      setStatus('active')
+      setEnrolledDate(new Date().toISOString().split('T')[0])
+      setAadharNumber('')
+    }
+    setError('')
+  }, [isOpen, editingPlayer]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const filteredBatches = batches.filter(b => b.branch_id === branchId)
 
