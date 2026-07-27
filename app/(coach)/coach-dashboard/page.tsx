@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client';
 import { Users, IndianRupee, CalendarDays, CheckCircle2 } from 'lucide-react';
 import { StatCard } from '@/components/ui/StatCard';
 import { GlassCard } from '@/components/ui/GlassCard';
+import { FeeReminders } from '@/components/coach/FeeReminders';
 import { getCoachBranches } from '@/lib/coach';
 
 interface CoachDashboardStats {
@@ -112,6 +113,9 @@ export default function CoachDashboardPage() {
               iconColor="text-red-500"
             />
           </div>
+
+          {/* Fee Reminders */}
+          {profile && <FeeReminders userId={profile.id} compact />}
 
           {/* Quick Actions Card */}
           <GlassCard title="What you can do next" className="relative overflow-hidden">

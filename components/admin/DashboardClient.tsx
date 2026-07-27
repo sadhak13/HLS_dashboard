@@ -7,7 +7,7 @@ import { PeriodPicker, PeriodRange, getDefaultPeriod } from '@/components/admin/
 import { Users, MapPin, IndianRupee, Activity, UserPlus, AlertCircle, TrendingUp } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { formatDistanceToNow, parseISO, format, eachMonthOfInterval } from 'date-fns';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Sector } from 'recharts';
 
 type ActivityItem = {
   id: string;
@@ -45,6 +45,7 @@ export function DashboardClient({ branchesMap, initialBranchesCount }: Dashboard
   const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [chartData, setChartData] = useState<ChartData[]>([]);
   const [branchDistribution, setBranchDistribution] = useState<{ name: string; value: number }[]>([]);
+  const [activePieIndex, setActivePieIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
 
   const supabase = createClient();
@@ -384,36 +385,84 @@ export function DashboardClient({ branchesMap, initialBranchesCount }: Dashboard
             {branchDistribution.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
+                  <defs>
+                    {branchDistribution.map((_, index) => (
+                      <linearGradient key={`grad-${index}`} id={`pieGrad-${index}`} x1="0" y1="0" x2="1" y2="1">
+                        <stop offset="0%" stopColor={PIE_COLORS[index % PIE_COLORS.length]} stopOpacity={1} />
+                        <stop offset="100%" stopColor={PIE_COLORS[index % PIE_COLORS.length]} stopOpacity={0.6} />
+                      </linearGradient>
+                    ))}
+                  </defs>
                   <Pie
+                    activeShape={(props: any) => {
+                      const { cx, cy, innerRadius, outerRadius, startAngle, endAngle, fill } = props;
+                      return (
+                        <g>
+                          <Sector
+                            cx={cx}
+                            cy={cy}
+                            innerRadius={innerRadius}
+                            outerRadius={outerRadius + 8}
+                            startAngle={startAngle}
+                            endAngle={endAngle}
+                            fill={fill}
+                            cornerRadius={4}
+                          />
+                          <Sector
+                            cx={cx}
+                            cy={cy}
+                            innerRadius={outerRadius + 12}
+                            outerRadius={outerRadius + 15}
+                            startAngle={startAngle}
+                            endAngle={endAngle}
+                            fill={fill}
+                            opacity={0.3}
+                            cornerRadius={2}
+                          />
+                        </g>
+                      );
+                    }}
                     data={branchDistribution}
                     cx="50%"
                     cy="50%"
-                    innerRadius="40%"
-                    outerRadius="70%"
-                    paddingAngle={2}
+                    innerRadius="52%"
+                    outerRadius="78%"
+                    paddingAngle={3}
                     dataKey="value"
                     nameKey="name"
-                    label={({ name, percent }) => `${name} (${((percent ?? 0) * 100).toFixed(0)}%)`}
-                    labelLine={{ stroke: 'rgba(255,255,255,0.3)' }}
+                    cornerRadius={6}
+                    onMouseEnter={(_, index) => setActivePieIndex(index)}
+                    animationBegin={0}
+                    animationDuration={1000}
+                    animationEasing="ease-out"
                   >
                     {branchDistribution.map((_, index) => (
-                      <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+                      <Cell
+                        key={`cell-${index}`}
+                        fill={`url(#pieGrad-${index})`}
+                        stroke="rgba(0,0,0,0.2)"
+                        strokeWidth={1}
+                      />
                     ))}
                   </Pie>
+                  {/* Center label */}
+                  <text x="50%" y="47%" textAnchor="middle" dominantBaseline="middle" className="fill-white" style={{ fontSize: '28px', fontWeight: 700 }}>
+                    {branchDistribution.reduce((s, b) => s + b.value, 0)}
+                  </text>
+                  <text x="50%" y="57%" textAnchor="middle" dominantBaseline="middle" className="fill-gray-400" style={{ fontSize: '11px' }}>
+                    students
+                  </text>
                   <Tooltip
                     contentStyle={{
                       borderRadius: '12px',
                       border: '1px solid rgba(255,255,255,0.1)',
-                      backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                      backgroundColor: 'rgba(15, 23, 42, 0.95)',
                       backdropFilter: 'blur(12px)',
                       color: '#fff',
+                      boxShadow: '0 20px 40px rgba(0,0,0,0.4)',
+                      padding: '10px 14px',
                     }}
                     formatter={(value: any, name: any) => [`${value} students`, name]}
-                  />
-                  <Legend
-                    verticalAlign="bottom"
-                    height={36}
-                    formatter={(value) => <span className="text-xs text-gray-300">{value}</span>}
                   />
                 </PieChart>
               </ResponsiveContainer>
@@ -423,6 +472,31 @@ export function DashboardClient({ branchesMap, initialBranchesCount }: Dashboard
               </div>
             )}
           </div>
+          {/* Modern inline legend */}
+          {branchDistribution.length > 0 && (
+            <div className="flex flex-wrap gap-x-4 gap-y-2 mt-2">
+              {branchDistribution.map((branch, i) => {
+                const total = branchDistribution.reduce((s, b) => s + b.value, 0);
+                const pct = total > 0 ? ((branch.value / total) * 100).toFixed(0) : '0';
+                return (
+                  <button
+                    key={branch.name}
+                    onMouseEnter={() => setActivePieIndex(i)}
+                    className={`flex items-center gap-2 px-2 py-1 rounded-lg transition-all text-xs ${
+                      activePieIndex === i ? 'bg-white/10' : 'hover:bg-white/5'
+                    }`}
+                  >
+                    <span
+                      className="w-2.5 h-2.5 rounded-full shrink-0"
+                      style={{ backgroundColor: PIE_COLORS[i % PIE_COLORS.length] }}
+                    />
+                    <span className="text-gray-300 font-medium">{branch.name}</span>
+                    <span className="text-gray-500">{pct}%</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </GlassCard>
 
         {/* Branch-wise breakdown table */}

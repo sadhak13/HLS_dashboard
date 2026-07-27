@@ -7,6 +7,7 @@ import { FeeTable } from '@/components/admin/FeeTable';
 import { EditFeeModal, FeeRecord } from '@/components/admin/EditFeeModal';
 import { Pagination } from '@/components/ui/Pagination';
 import { IndianRupee, Zap, ChevronLeft, ChevronRight, TrendingUp, Clock } from 'lucide-react';
+import { FeeReminders } from '@/components/coach/FeeReminders';
 import { generateFeesForBranches } from '@/app/(admin)/fees/actions';
 import { format, addMonths, subMonths, isAfter, startOfMonth } from 'date-fns';
 import { getCoachBranches } from '@/lib/coach';
@@ -246,6 +247,9 @@ export default function MyFeesPage() {
           </div>
         </div>
       </div>
+
+      {/* Fee Reminders */}
+      {profile && <FeeReminders userId={profile.id} />}
 
       {/* Fee Table */}
       <div className="rounded-2xl bg-white/[0.03] border border-white/10 overflow-hidden">
