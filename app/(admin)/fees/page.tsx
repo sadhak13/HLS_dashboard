@@ -5,6 +5,7 @@ import { FeeTable } from '@/components/admin/FeeTable';
 import { AddFeeModal } from '@/components/admin/AddFeeModal';
 import { EditFeeModal, FeeRecord } from '@/components/admin/EditFeeModal';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { Pagination } from '@/components/ui/Pagination';
 import { useToast } from '@/components/ui/Toast';
@@ -48,6 +49,9 @@ export default function FeesPage() {
   const [generateMessage, setGenerateMessage] = useState('');
   const [editingFee, setEditingFee] = useState<FeeRecord | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [markPaidFeeId, setMarkPaidFeeId] = useState<string | null>(null);
+  const [markPaidMode, setMarkPaidMode] = useState<'cash' | 'online' | 'cash+online'>('cash');
+  const [isMarkingPaid, setIsMarkingPaid] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 20;
 
@@ -139,19 +143,30 @@ export default function FeesPage() {
     fetchStats(filterBranch, filterBatch);
   }, [fetchFees, fetchStats, currentPage, filterStatus, filterBranch, filterBatch]);
 
-  const handleMarkPaid = async (feeId: string) => {
+  const handleMarkPaidClick = (feeId: string) => {
+    setMarkPaidFeeId(feeId);
+    setMarkPaidMode('cash');
+  };
+
+  const handleConfirmMarkPaid = async () => {
+    if (!markPaidFeeId) return;
+    setIsMarkingPaid(true);
+
     const { error } = await (supabase as any)
       .from('fees')
       .update({
         status: 'paid',
+        mode_of_payment: markPaidMode,
         paid_date: new Date().toISOString(),
       })
-      .eq('id', feeId);
+      .eq('id', markPaidFeeId);
 
     if (!error) {
       fetchFees(currentPage, filterStatus, filterBranch, filterBatch);
       fetchStats(filterBranch, filterBatch);
     }
+    setIsMarkingPaid(false);
+    setMarkPaidFeeId(null);
   };
 
   const handleGenerateNextMonthFees = async () => {
@@ -356,7 +371,7 @@ export default function FeesPage() {
           <FeeTable
             fees={fees}
             isLoading={isLoading}
-            onMarkPaid={handleMarkPaid}
+            onMarkPaid={handleMarkPaidClick}
             onEdit={(fee) => {
               setEditingFee(fee);
               setIsEditModalOpen(true);
@@ -390,6 +405,49 @@ export default function FeesPage() {
         onSuccess={() => { fetchFees(currentPage, filterStatus, filterBranch, filterBatch); fetchStats(filterBranch, filterBatch); }}
         fee={editingFee}
       />
+
+      {/* Mark Paid modal */}
+      <Modal
+        isOpen={!!markPaidFeeId}
+        onClose={() => setMarkPaidFeeId(null)}
+        title="Mark as Paid"
+        maxWidth="sm"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-400">Select the payment mode used by the player.</p>
+          <div className="grid grid-cols-3 gap-2">
+            {(['cash', 'online', 'cash+online'] as const).map((mode) => (
+              <button
+                key={mode}
+                onClick={() => setMarkPaidMode(mode)}
+                className={`px-3 py-2.5 rounded-lg text-sm font-medium capitalize transition-colors border ${
+                  markPaidMode === mode
+                    ? 'bg-green-600 border-green-600 text-white'
+                    : 'bg-white/5 border-white/10 text-gray-300 hover:bg-white/10'
+                }`}
+              >
+                {mode === 'cash+online' ? 'Cash + Online' : mode}
+              </button>
+            ))}
+          </div>
+          <div className="flex gap-3 pt-2">
+            <Button
+              variant="secondary"
+              className="flex-1"
+              onClick={() => setMarkPaidFeeId(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              className="flex-1"
+              onClick={handleConfirmMarkPaid}
+              isLoading={isMarkingPaid}
+            >
+              Confirm
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }
