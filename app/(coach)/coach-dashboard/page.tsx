@@ -7,7 +7,7 @@ import { Users, IndianRupee, CalendarDays, CheckCircle2 } from 'lucide-react';
 import { StatCard } from '@/components/ui/StatCard';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { FeeReminders } from '@/components/coach/FeeReminders';
-import { getCoachBranches } from '@/lib/coach';
+import { getCoachBranches, getCoachBatchInfo } from '@/lib/coach';
 
 interface CoachDashboardStats {
   branchName: string;
@@ -34,7 +34,10 @@ export default function CoachDashboardPage() {
     if (!profile) return;
     setIsLoading(true);
 
-    const branches = await getCoachBranches(profile.id);
+    const [branches, batchInfo] = await Promise.all([
+      getCoachBranches(profile.id),
+      getCoachBatchInfo(profile.id),
+    ]);
 
     if (branches.length === 0) {
       setIsLoading(false);
@@ -43,16 +46,47 @@ export default function CoachDashboardPage() {
 
     const branchIds = branches.map(b => b.id);
     const branchNames = branches.map(b => b.name).join(', ');
+    const hasBatches = !batchInfo.isBranchFallback && batchInfo.batchIds.length > 0;
 
+    // Build player query — scoped to batches if available, else branch
+    let playersQuery = (supabase as any).from('players').select('id').eq('status', 'active');
+    if (hasBatches) {
+      playersQuery = playersQuery.in('batch_id', batchInfo.batchIds);
+    } else {
+      playersQuery = playersQuery.in('branch_id', branchIds);
+    }
+
+    // Fees and attendance still use branch_id (no batch_id on those tables)
+    // We'll filter fees client-side by player batch if needed
     const [{ data: playersData }, { data: feesData }, { data: attendanceData }] = await Promise.all([
-      (supabase as any).from('players').select('id').in('branch_id', branchIds).eq('status', 'active'),
-      (supabase as any).from('fees').select('amount,status').in('branch_id', branchIds).in('status', ['pending', 'overdue']),
-      (supabase as any).from('attendance').select('status').in('branch_id', branchIds).eq('date', today),
+      playersQuery,
+      (supabase as any)
+        .from('fees')
+        .select('amount, status, players(batch_id)')
+        .in('branch_id', branchIds)
+        .in('status', ['pending', 'overdue']),
+      (supabase as any)
+        .from('attendance')
+        .select('status, batch_id')
+        .in('branch_id', branchIds)
+        .eq('date', today),
     ]);
 
-    const pendingAmount = (feesData ?? []).reduce((sum: number, fee: any) => sum + Number(fee.amount || 0), 0);
-    const presentCount = (attendanceData ?? []).filter((row: any) => row.status === 'present').length;
-    const absentCount = (attendanceData ?? []).filter((row: any) => row.status === 'absent').length;
+    const batchSet = hasBatches ? new Set(batchInfo.batchIds) : null;
+
+    // Filter fees to coach's batches
+    const scopedFees = batchSet
+      ? (feesData ?? []).filter((fee: any) => fee.players?.batch_id && batchSet.has(fee.players.batch_id))
+      : (feesData ?? []);
+
+    // Filter attendance to coach's batches
+    const scopedAttendance = batchSet
+      ? (attendanceData ?? []).filter((row: any) => row.batch_id && batchSet.has(row.batch_id))
+      : (attendanceData ?? []);
+
+    const pendingAmount = scopedFees.reduce((sum: number, fee: any) => sum + Number(fee.amount || 0), 0);
+    const presentCount = scopedAttendance.filter((row: any) => row.status === 'present').length;
+    const absentCount = scopedAttendance.filter((row: any) => row.status === 'absent').length;
 
     setStats({
       branchName: branchNames,

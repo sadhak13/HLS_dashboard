@@ -8,7 +8,7 @@ import { AddPlayerModal } from '@/components/shared/AddPlayerModal'
 import { AddFeesForNewPlayerModal } from '@/components/coach/AddFeesForNewPlayerModal'
 import { DeletePlayerModal } from '@/components/coach/DeletePlayerModal'
 import { Pagination } from '@/components/ui/Pagination'
-import { getCoachBranches, type CoachBranch } from '@/lib/coach'
+import { getCoachBranches, getCoachBatchInfo, type CoachBranch } from '@/lib/coach'
 
 interface PlayerRecord {
   id: string
@@ -55,7 +55,10 @@ export default function MyPlayersPage() {
     if (!profile) return
     setIsLoading(true)
 
-    const branches = await getCoachBranches(profile.id)
+    const [branches, batchInfo] = await Promise.all([
+      getCoachBranches(profile.id),
+      getCoachBatchInfo(profile.id),
+    ])
     setCoachBranches(branches)
 
     if (branches.length === 0) {
@@ -64,14 +67,25 @@ export default function MyPlayersPage() {
     }
 
     setBranchId(branches[0].id)
-    const branchIds = branches.map(b => b.id)
 
-    const { data } = await (supabase as any)
+    let query = (supabase as any)
       .from('players')
       .select('id, full_name, status, parent_name, parent_phone, date_of_birth, enrolled_date, batch_id, aadhar_number, branch_id')
-      .in('branch_id', branchIds)
       .order('full_name')
 
+    if (!batchInfo.isBranchFallback && batchInfo.batchIds.length > 0) {
+      // Scope to this coach's batches only
+      query = query.in('batch_id', batchInfo.batchIds)
+    } else if (batchInfo.branchIds.length > 0) {
+      // Fallback: no batch assignments → show full branch
+      query = query.in('branch_id', batchInfo.branchIds)
+    } else {
+      setPlayers([])
+      setIsLoading(false)
+      return
+    }
+
+    const { data } = await query
     setPlayers((data as PlayerRecord[]) ?? [])
     setIsLoading(false)
   }, [profile]) // eslint-disable-line react-hooks/exhaustive-deps

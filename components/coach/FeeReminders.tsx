@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { Bell, Phone } from 'lucide-react';
-import { getCoachBranches } from '@/lib/coach';
+import { getCoachBranches, getCoachBatchInfo } from '@/lib/coach';
 
 interface PendingFeePlayer {
   playerName: string;
@@ -31,7 +31,11 @@ export function FeeReminders({ userId, compact = false }: FeeRemindersProps) {
   const fetchReminders = useCallback(async () => {
     setIsLoading(true);
 
-    const branches = await getCoachBranches(userId);
+    const [branches, batchInfo] = await Promise.all([
+      getCoachBranches(userId),
+      getCoachBatchInfo(userId),
+    ]);
+
     if (branches.length === 0) {
       setIsLoading(false);
       return;
@@ -44,7 +48,7 @@ export function FeeReminders({ userId, compact = false }: FeeRemindersProps) {
 
     const { data: fees } = await (supabase as any)
       .from('fees')
-      .select('amount, players (full_name, parent_phone, enrolled_date)')
+      .select('amount, players (full_name, parent_phone, enrolled_date, batch_id)')
       .in('branch_id', branchIds)
       .eq('month', currentMonth)
       .eq('status', 'pending');
@@ -55,10 +59,18 @@ export function FeeReminders({ userId, compact = false }: FeeRemindersProps) {
       return;
     }
 
+    // Filter to this coach's batches if they have batch assignments
+    const batchSet = (!batchInfo.isBranchFallback && batchInfo.batchIds.length > 0)
+      ? new Set(batchInfo.batchIds)
+      : null;
+
     const pending: PendingFeePlayer[] = [];
 
     for (const fee of fees) {
       if (!fee.players) continue;
+      // Skip players not in this coach's batches
+      if (batchSet && (!fee.players.batch_id || !batchSet.has(fee.players.batch_id))) continue;
+
       const dueDate = getDueDate(fee.players.enrolled_date);
       const daysLeft = dueDate - currentDay;
 

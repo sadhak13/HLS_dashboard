@@ -12,7 +12,7 @@ import { IndianRupee, Zap, ChevronLeft, ChevronRight, TrendingUp, Clock } from '
 import { FeeReminders } from '@/components/coach/FeeReminders';
 import { generateFeesForBranches } from '@/app/(admin)/fees/actions';
 import { format, addMonths, subMonths, isAfter, startOfMonth } from 'date-fns';
-import { getCoachBranches } from '@/lib/coach';
+import { getCoachBranches, getCoachBatchInfo } from '@/lib/coach';
 
 export default function MyFeesPage() {
   const { profile } = useAuth();
@@ -43,7 +43,10 @@ export default function MyFeesPage() {
     if (!profile) return;
     setIsLoading(true);
 
-    const branches = await getCoachBranches(profile.id);
+    const [branches, batchInfo] = await Promise.all([
+      getCoachBranches(profile.id),
+      getCoachBatchInfo(profile.id),
+    ]);
 
     if (branches.length === 0) {
       setIsLoading(false);
@@ -54,14 +57,35 @@ export default function MyFeesPage() {
     setBranchIds(resolvedBranchIds);
     setCoachBranches(branches);
 
-    const { data } = await (supabase as any)
+    let query = (supabase as any)
       .from('fees')
-      .select(`*, players(full_name, branch_id), branches(name)`)
-      .in('branch_id', resolvedBranchIds)
+      .select(`*, players(full_name, branch_id, batch_id), branches(name)`)
       .eq('month', selectedMonthStr)
       .order('created_at', { ascending: false });
 
-    setFees((data as FeeRecord[]) ?? []);
+    if (!batchInfo.isBranchFallback && batchInfo.batchIds.length > 0) {
+      // Scope to players in this coach's batches only
+      // We fetch by branch then filter client-side by batch (fees table has no batch_id)
+      query = query.in('branch_id', resolvedBranchIds);
+    } else if (resolvedBranchIds.length > 0) {
+      query = query.in('branch_id', resolvedBranchIds);
+    } else {
+      setFees([]);
+      setIsLoading(false);
+      return;
+    }
+
+    const { data } = await query;
+
+    let result = (data as FeeRecord[]) ?? [];
+
+    // If this coach has batch assignments, filter fees to only players in those batches
+    if (!batchInfo.isBranchFallback && batchInfo.batchIds.length > 0) {
+      const batchSet = new Set(batchInfo.batchIds);
+      result = result.filter((fee: any) => fee.players?.batch_id && batchSet.has(fee.players.batch_id));
+    }
+
+    setFees(result);
     setIsLoading(false);
   }, [profile, selectedMonthStr]); // eslint-disable-line react-hooks/exhaustive-deps
 
