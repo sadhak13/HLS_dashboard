@@ -3,6 +3,8 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { CalendarDays, Filter, Users, CheckCircle, XCircle, TrendingUp, ChevronLeft, ChevronRight, Search, Clock } from 'lucide-react';
+import { Pagination } from '@/components/ui/Pagination';
+import { clientCache } from '@/lib/clientCache';
 
 interface AttendanceRecord {
   id: string;
@@ -91,26 +93,53 @@ function MiniCalendar({ selectedDate, onDateChange }: { selectedDate: string; on
 
 export default function AdminAttendancePage() {
   const supabase = createClient();
-  const [records, setRecords] = useState<AttendanceRecord[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [branches, setBranches] = useState<{ id: string; name: string }[]>([]);
-  const [batches, setBatches] = useState<BatchOption[]>([]);
+
   const [selectedBranch, setSelectedBranch] = useState('all');
   const [selectedBatch, setSelectedBatch] = useState('all');
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+
+  // Cache keys
+  const cacheKeyBranches = 'admin_attendance_branches';
+  const cacheKeyBatches = 'admin_attendance_batches';
+  const recordCacheKeyWithDate = `admin_attendance_records_${selectedDate}_${selectedBranch}_${selectedBatch}`;
+
+  // Initialize states with clientCache if available
+  const [branches, setBranches] = useState<{ id: string; name: string }[]>(() => {
+    return clientCache.get<{ id: string; name: string }[]>(cacheKeyBranches) ?? [];
+  });
+  
+  const [batches, setBatches] = useState<BatchOption[]>(() => {
+    return clientCache.get<BatchOption[]>(cacheKeyBatches) ?? [];
+  });
+
+  const [records, setRecords] = useState<AttendanceRecord[]>(() => {
+    return clientCache.get<AttendanceRecord[]>(recordCacheKeyWithDate) ?? [];
+  });
+
+  const [isLoading, setIsLoading] = useState(() => {
+    return !clientCache.get(recordCacheKeyWithDate);
+  });
+
   const [searchQuery, setSearchQuery] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 20;
 
   useEffect(() => {
     const fetchFilters = async () => {
       const { data: branchData } = await supabase.from('branches').select('id, name').order('name');
-      if (branchData) setBranches(branchData);
+      if (branchData) {
+        setBranches(branchData);
+        clientCache.set(cacheKeyBranches, branchData);
+      }
 
       const { data: batchData } = await (supabase as any).from('batches').select('id, name, branch_id').order('start_time');
-      if (batchData) setBatches(batchData);
+      if (batchData) {
+        setBatches(batchData);
+        clientCache.set(cacheKeyBatches, batchData);
+      }
     };
     fetchFilters();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
   const filteredBatches = selectedBranch === 'all'
     ? batches
     : batches.filter(b => b.branch_id === selectedBranch);
@@ -118,10 +147,13 @@ export default function AdminAttendancePage() {
   const handleBranchChange = (value: string) => {
     setSelectedBranch(value);
     setSelectedBatch('all');
+    setCurrentPage(1);
   };
 
   const fetchAttendance = useCallback(async () => {
-    setIsLoading(true);
+    // Only show spinner on first fetch for this filter set
+    if (records.length === 0) setIsLoading(true);
+
     let query = (supabase as any)
       .from('attendance')
       .select(`*, players(full_name), branches(name), batches(name)`)
@@ -136,13 +168,20 @@ export default function AdminAttendancePage() {
     }
 
     const { data } = await query;
-    setRecords((data as AttendanceRecord[]) ?? []);
+    const results = (data as AttendanceRecord[]) ?? [];
+    setRecords(results);
+    clientCache.set(recordCacheKeyWithDate, results);
     setIsLoading(false);
-  }, [selectedDate, selectedBranch, selectedBatch]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selectedDate, selectedBranch, selectedBatch, recordCacheKeyWithDate]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     fetchAttendance();
   }, [fetchAttendance]);
+
+  // Reset pagination on search query or date changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, selectedDate, selectedBatch, selectedBranch]);
 
   const presentCount = records.filter((r) => r.status === 'present').length;
   const absentCount = records.filter((r) => r.status === 'absent').length;
@@ -150,6 +189,12 @@ export default function AdminAttendancePage() {
 
   const filteredRecords = records.filter((r) =>
     r.players?.full_name?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const totalPages = Math.ceil(filteredRecords.length / ITEMS_PER_PAGE);
+  const paginatedRecords = filteredRecords.slice(
+    (currentPage - 1) * ITEMS_PER_PAGE,
+    currentPage * ITEMS_PER_PAGE
   );
 
   const displayDate = new Date(selectedDate).toLocaleDateString('en-IN', {
@@ -292,7 +337,7 @@ export default function AdminAttendancePage() {
 
                 {/* Records */}
                 <div className="divide-y divide-white/5">
-                  {filteredRecords.map((record) => (
+                  {paginatedRecords.map((record) => (
                     <div key={record.id} className="grid grid-cols-1 sm:grid-cols-[2fr_1fr_1fr_1fr] gap-2 sm:gap-4 px-6 py-4 hover:bg-white/[0.02] transition-colors">
                       {/* Player */}
                       <div className="flex items-center gap-3">
@@ -331,6 +376,18 @@ export default function AdminAttendancePage() {
                     </div>
                   ))}
                 </div>
+
+                {/* Pagination Controls */}
+                {filteredRecords.length > ITEMS_PER_PAGE && (
+                  <Pagination
+                    currentPage={currentPage}
+                    totalPages={totalPages}
+                    onPageChange={setCurrentPage}
+                    totalItems={filteredRecords.length}
+                    itemsPerPage={ITEMS_PER_PAGE}
+                    itemLabel="records"
+                  />
+                )}
               </>
             )}
           </div>
