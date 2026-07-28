@@ -13,6 +13,7 @@ import { FeeReminders } from '@/components/coach/FeeReminders';
 import { generateFeesForBranches } from '@/app/(admin)/fees/actions';
 import { format, addMonths, subMonths, isAfter, startOfMonth } from 'date-fns';
 import { getCoachBranches, getCoachBatchInfo } from '@/lib/coach';
+import { clientCache } from '@/lib/clientCache';
 
 export default function MyFeesPage() {
   const { profile } = useAuth();
@@ -24,8 +25,23 @@ export default function MyFeesPage() {
   const selectedMonthStr = format(currentMonthDate, 'yyyy-MM');
   const selectedMonthDisplay = format(currentMonthDate, 'MMMM yyyy');
 
-  const [fees, setFees] = useState<FeeRecord[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  // Cache key unique to this user and month
+  const cacheKey = profile ? `coach_fees_${profile.id}_${selectedMonthStr}` : '';
+
+  const [fees, setFees] = useState<FeeRecord[]>(() => {
+    if (cacheKey) {
+      const cached = clientCache.get<FeeRecord[]>(cacheKey);
+      if (cached) return cached;
+    }
+    return [];
+  });
+
+  const [isLoading, setIsLoading] = useState(() => {
+    if (cacheKey) {
+      return !clientCache.get(cacheKey);
+    }
+    return true;
+  });
   const [branchIds, setBranchIds] = useState<string[]>([]);
   const [coachBranches, setCoachBranches] = useState<{ id: string; name: string }[]>([]);
   const [selectedBranchFilter, setSelectedBranchFilter] = useState<string>('all');
@@ -41,7 +57,8 @@ export default function MyFeesPage() {
 
   const fetchFees = useCallback(async () => {
     if (!profile) return;
-    setIsLoading(true);
+    // Only show the spinner on the very first load — subsequent refreshes happen silently
+    if (fees.length === 0) setIsLoading(true);
 
     const [branches, batchInfo] = await Promise.all([
       getCoachBranches(profile.id),
@@ -86,8 +103,11 @@ export default function MyFeesPage() {
     }
 
     setFees(result);
+    if (cacheKey) {
+      clientCache.set(cacheKey, result);
+    }
     setIsLoading(false);
-  }, [profile, selectedMonthStr]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [profile, selectedMonthStr, cacheKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     fetchFees();

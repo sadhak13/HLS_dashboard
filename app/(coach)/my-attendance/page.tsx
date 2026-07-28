@@ -7,6 +7,7 @@ import {
   CheckCircle, XCircle, Send, CalendarDays, Users, Search,
   Clock, CheckCheck, X, ChevronLeft, ChevronRight, Filter
 } from 'lucide-react';
+import { clientCache } from '@/lib/clientCache';
 
 interface Player {
   id: string;
@@ -130,26 +131,75 @@ export default function CoachAttendancePage() {
   const { profile } = useAuth();
   const supabase = createClient();
 
-  const [batches, setBatches] = useState<BatchOption[]>([]);
+  const [selectedDate, setSelectedDate] = useState(getTodayString());
   const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null);
-  const [players, setPlayers] = useState<Player[]>([]);
-  const [attendance, setAttendance] = useState<AttendanceState>({});
+
+  const cacheKeyBatches = profile ? `coach_attendance_batches_${profile.id}` : '';
+  const cacheKeyMarked = profile ? `coach_attendance_marked_${profile.id}` : '';
+  const cacheKeyPlayers = (profile && selectedBatchId) ? `coach_attendance_players_${profile.id}_${selectedBatchId}_${selectedDate}` : '';
+
+  const [batches, setBatches] = useState<BatchOption[]>(() => {
+    if (cacheKeyBatches) {
+      const cached = clientCache.get<BatchOption[]>(cacheKeyBatches);
+      if (cached) return cached;
+    }
+    return [];
+  });
+  
+  const [players, setPlayers] = useState<Player[]>(() => {
+    if (cacheKeyPlayers) {
+      const cached = clientCache.get<{ players: Player[] }>(cacheKeyPlayers);
+      if (cached) return cached.players;
+    }
+    return [];
+  });
+
+  const [attendance, setAttendance] = useState<AttendanceState>(() => {
+    if (cacheKeyPlayers) {
+      const cached = clientCache.get<{ attendance: AttendanceState }>(cacheKeyPlayers);
+      if (cached) return cached.attendance;
+    }
+    return {};
+  });
+
   const [branchId, setBranchId] = useState<string | null>(null);
   const [coachId, setCoachId] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  
+  const [isLoading, setIsLoading] = useState(() => {
+    if (cacheKeyBatches) {
+      return !clientCache.get(cacheKeyBatches);
+    }
+    return true;
+  });
+
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [alreadySubmitted, setAlreadySubmitted] = useState(false);
+  
+  const [alreadySubmitted, setAlreadySubmitted] = useState(() => {
+    if (cacheKeyPlayers) {
+      const cached = clientCache.get<{ alreadySubmitted: boolean }>(cacheKeyPlayers);
+      if (cached) return cached.alreadySubmitted;
+    }
+    return false;
+  });
+
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedDate, setSelectedDate] = useState(getTodayString());
-  const [markedDates, setMarkedDates] = useState<Set<string>>(new Set());
+  
+  const [markedDates, setMarkedDates] = useState<Set<string>>(() => {
+    if (cacheKeyMarked) {
+      const cached = clientCache.get<string[]>(cacheKeyMarked);
+      if (cached) return new Set(cached);
+    }
+    return new Set();
+  });
 
   const today = getTodayString();
   const isToday = selectedDate === today;
 
   const fetchBatches = useCallback(async () => {
     if (!profile) return;
-    setIsLoading(true);
+    // Only show the spinner on first load — revisiting the page shows previous data instantly
+    if (batches.length === 0) setIsLoading(true);
 
     const { data: coachData } = await (supabase as any)
       .from('coaches')
@@ -175,6 +225,9 @@ export default function CoachAttendancePage() {
         branch_name: cb.batches.branches?.name || '',
       }));
       setBatches(batchOptions);
+      if (cacheKeyBatches) {
+        clientCache.set(cacheKeyBatches, batchOptions);
+      }
       if (batchOptions.length === 1) {
         setSelectedBatchId(batchOptions[0].id);
       } else {
@@ -185,7 +238,7 @@ export default function CoachAttendancePage() {
       setSelectedBatchId(null);
       setIsLoading(false);
     }
-  }, [profile]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [profile, cacheKeyBatches]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fetch marked dates for the calendar dots
   const fetchMarkedDates = useCallback(async () => {
@@ -211,13 +264,17 @@ export default function CoachAttendancePage() {
 
     const { data } = await query;
     if (data) {
-      const dates = new Set<string>(data.map((r: any) => r.date));
-      setMarkedDates(dates);
+      const dates = data.map((r: any) => r.date);
+      setMarkedDates(new Set(dates));
+      if (cacheKeyMarked) {
+        clientCache.set(cacheKeyMarked, dates);
+      }
     }
-  }, [coachId, batches, branchId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [coachId, batches, branchId, cacheKeyMarked]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadPlayersForBatch = useCallback(async (batchId: string, date: string) => {
-    setIsLoading(true);
+    // Only show spinner when we don't already have players loaded
+    if (players.length === 0) setIsLoading(true);
     setAlreadySubmitted(false);
     setSubmitSuccess(false);
     setAttendance({});
@@ -252,6 +309,9 @@ export default function CoachAttendancePage() {
 
     setPlayers(playerList as Player[]);
 
+    let currentAlreadySubmitted = false;
+    let currentAttendance: AttendanceState = {};
+
     if (playerList.length > 0) {
       const { data: existingAttendance } = await (supabase as any)
         .from('attendance')
@@ -260,26 +320,32 @@ export default function CoachAttendancePage() {
         .eq('date', date);
 
       if (existingAttendance && existingAttendance.length > 0) {
-        setAlreadySubmitted(true);
-        const existing: AttendanceState = {};
+        currentAlreadySubmitted = true;
         existingAttendance.forEach((r: any) => {
-          existing[r.player_id] = r.status as AttendanceStatus;
+          currentAttendance[r.player_id] = r.status as AttendanceStatus;
         });
-        setAttendance(existing);
       } else {
         if (date === today) {
-          const defaults: AttendanceState = {};
-          playerList.forEach((p: any) => { defaults[p.id] = 'present'; });
-          setAttendance(defaults);
+          playerList.forEach((p: any) => { currentAttendance[p.id] = 'present'; });
         } else {
-          setAttendance({});
-          setAlreadySubmitted(true);
+          currentAlreadySubmitted = true;
         }
       }
     }
 
+    setAlreadySubmitted(currentAlreadySubmitted);
+    setAttendance(currentAttendance);
+
+    if (cacheKeyPlayers) {
+      clientCache.set(cacheKeyPlayers, {
+        players: playerList,
+        attendance: currentAttendance,
+        alreadySubmitted: currentAlreadySubmitted,
+      });
+    }
+
     setIsLoading(false);
-  }, [branchId, today]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [branchId, today, cacheKeyPlayers]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     fetchBatches();
@@ -334,7 +400,20 @@ export default function CoachAttendancePage() {
     if (!error) {
       setAlreadySubmitted(true);
       setSubmitSuccess(true);
-      setMarkedDates(prev => new Set([...prev, selectedDate]));
+      
+      const newMarkedDates = new Set([...markedDates, selectedDate]);
+      setMarkedDates(newMarkedDates);
+      if (cacheKeyMarked) {
+        clientCache.set(cacheKeyMarked, Array.from(newMarkedDates));
+      }
+
+      if (cacheKeyPlayers) {
+        clientCache.set(cacheKeyPlayers, {
+          players,
+          attendance,
+          alreadySubmitted: true,
+        });
+      }
     }
 
     setIsSubmitting(false);

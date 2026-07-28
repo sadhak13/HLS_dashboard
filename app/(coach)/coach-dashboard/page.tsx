@@ -8,6 +8,7 @@ import { StatCard } from '@/components/ui/StatCard';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { FeeReminders } from '@/components/coach/FeeReminders';
 import { getCoachBranches, getCoachBatchInfo } from '@/lib/coach';
+import { clientCache } from '@/lib/clientCache';
 
 interface CoachDashboardStats {
   branchName: string;
@@ -20,19 +21,36 @@ interface CoachDashboardStats {
 export default function CoachDashboardPage() {
   const { profile } = useAuth();
   const supabase = createClient();
-  const [stats, setStats] = useState<CoachDashboardStats>({
-    branchName: 'Your branch',
-    activePlayers: 0,
-    pendingAmount: 0,
-    presentCount: 0,
-    absentCount: 0,
+  
+  // Cache key unique to this user and date
+  const cacheKey = profile ? `coach_dashboard_stats_${profile.id}` : '';
+
+  const [stats, setStats] = useState<CoachDashboardStats>(() => {
+    if (cacheKey) {
+      const cached = clientCache.get<CoachDashboardStats>(cacheKey);
+      if (cached) return cached;
+    }
+    return {
+      branchName: 'Your branch',
+      activePlayers: 0,
+      pendingAmount: 0,
+      presentCount: 0,
+      absentCount: 0,
+    };
   });
-  const [isLoading, setIsLoading] = useState(true);
+
+  const [isLoading, setIsLoading] = useState(() => {
+    if (cacheKey) {
+      return !clientCache.get(cacheKey);
+    }
+    return true;
+  });
   const today = new Date().toISOString().split('T')[0];
 
   const fetchSummary = useCallback(async () => {
     if (!profile) return;
-    setIsLoading(true);
+    // Only show the spinner on the very first load — subsequent refreshes happen silently
+    if (stats.activePlayers === 0 && stats.pendingAmount === 0) setIsLoading(true);
 
     const [branches, batchInfo] = await Promise.all([
       getCoachBranches(profile.id),
@@ -88,15 +106,20 @@ export default function CoachDashboardPage() {
     const presentCount = scopedAttendance.filter((row: any) => row.status === 'present').length;
     const absentCount = scopedAttendance.filter((row: any) => row.status === 'absent').length;
 
-    setStats({
+    const newStats = {
       branchName: branchNames,
       activePlayers: playersData?.length || 0,
       pendingAmount,
       presentCount,
       absentCount,
-    });
+    };
+
+    setStats(newStats);
+    if (cacheKey) {
+      clientCache.set(cacheKey, newStats);
+    }
     setIsLoading(false);
-  }, [profile, today]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [profile, today, cacheKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     fetchSummary();

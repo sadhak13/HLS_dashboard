@@ -9,6 +9,7 @@ import { AddFeesForNewPlayerModal } from '@/components/coach/AddFeesForNewPlayer
 import { DeletePlayerModal } from '@/components/coach/DeletePlayerModal'
 import { Pagination } from '@/components/ui/Pagination'
 import { getCoachBranches, getCoachBatchInfo, type CoachBranch } from '@/lib/coach'
+import { clientCache } from '@/lib/clientCache'
 
 interface PlayerRecord {
   id: string
@@ -27,8 +28,23 @@ export default function MyPlayersPage() {
   const { profile } = useAuth()
   const supabase = createClient()
 
-  const [players, setPlayers] = useState<PlayerRecord[]>([])
-  const [isLoading, setIsLoading] = useState(true)
+  // Cache key unique to this user
+  const cacheKey = profile ? `coach_players_${profile.id}` : ''
+
+  const [players, setPlayers] = useState<PlayerRecord[]>(() => {
+    if (cacheKey) {
+      const cached = clientCache.get<PlayerRecord[]>(cacheKey)
+      if (cached) return cached
+    }
+    return []
+  })
+
+  const [isLoading, setIsLoading] = useState(() => {
+    if (cacheKey) {
+      return !clientCache.get(cacheKey)
+    }
+    return true
+  })
   const [branchId, setBranchId] = useState('')
   const [coachBranches, setCoachBranches] = useState<CoachBranch[]>([])
   const [selectedBranchFilter, setSelectedBranchFilter] = useState<string>('all')
@@ -53,7 +69,8 @@ export default function MyPlayersPage() {
 
   const fetchPlayers = useCallback(async () => {
     if (!profile) return
-    setIsLoading(true)
+    // Only show the spinner on the very first load — subsequent refreshes happen silently
+    if (players.length === 0) setIsLoading(true)
 
     const [branches, batchInfo] = await Promise.all([
       getCoachBranches(profile.id),
@@ -86,9 +103,13 @@ export default function MyPlayersPage() {
     }
 
     const { data } = await query
-    setPlayers((data as PlayerRecord[]) ?? [])
+    const results = (data as PlayerRecord[]) ?? []
+    setPlayers(results)
+    if (cacheKey) {
+      clientCache.set(cacheKey, results)
+    }
     setIsLoading(false)
-  }, [profile]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [profile, cacheKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     fetchPlayers()

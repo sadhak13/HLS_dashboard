@@ -49,11 +49,33 @@ export async function getCoachBranches(userId: string): Promise<CoachBranch[]> {
 }
 
 /**
+ * Module-level session cache for coach batch info.
+ * Batch/branch assignments rarely change mid-session, so we cache the result
+ * to avoid extra DB round-trips on every page navigation.
+ */
+const batchInfoCache = new Map<string, CoachBatchInfo>()
+
+/** Call this when coach logs out or assignments change, to bust the cache. */
+export function clearCoachBatchInfoCache(userId?: string) {
+  if (userId) {
+    batchInfoCache.delete(userId)
+  } else {
+    batchInfoCache.clear()
+  }
+}
+
+/**
  * Returns the coach's own batch IDs and branch IDs.
+ * Results are cached in memory for the duration of the browser session.
  * Use this to scope player/fee/attendance queries to the coach's specific batches.
  * Falls back to branch-level IDs only if the coach has no batch assignments.
  */
 export async function getCoachBatchInfo(userId: string): Promise<CoachBatchInfo> {
+  // Return cached result if available (avoids DB hit on every page revisit)
+  if (batchInfoCache.has(userId)) {
+    return batchInfoCache.get(userId)!
+  }
+
   const supabase = createClient()
 
   const { data: coachData } = await (supabase as any)
@@ -69,6 +91,8 @@ export async function getCoachBatchInfo(userId: string): Promise<CoachBatchInfo>
     .select('batch_id, batches (id, branch_id, branches (id, name))')
     .eq('coach_id', coachData.id)
 
+  let result: CoachBatchInfo
+
   if (coachBatches && coachBatches.length > 0) {
     const batchIds = coachBatches.map((cb: any) => cb.batch_id).filter(Boolean)
     const branchSet = new Set<string>()
@@ -76,10 +100,13 @@ export async function getCoachBatchInfo(userId: string): Promise<CoachBatchInfo>
       const branchId = cb.batches?.branch_id
       if (branchId) branchSet.add(branchId)
     }
-    return { batchIds, branchIds: Array.from(branchSet), isBranchFallback: false }
+    result = { batchIds, branchIds: Array.from(branchSet), isBranchFallback: false }
+  } else {
+    // Fallback: coach has no batch assignments — use branch-level access
+    const branchIds = coachData.branch_id ? [coachData.branch_id] : []
+    result = { batchIds: [], branchIds, isBranchFallback: true }
   }
 
-  // Fallback: coach has no batch assignments — use branch-level access
-  const branchIds = coachData.branch_id ? [coachData.branch_id] : []
-  return { batchIds: [], branchIds, isBranchFallback: true }
+  batchInfoCache.set(userId, result)
+  return result
 }
