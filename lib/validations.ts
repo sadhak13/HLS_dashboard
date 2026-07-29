@@ -4,7 +4,7 @@ export const playerSchema = z.object({
   fullName: z.string().min(3, 'Full name must be at least 3 characters').transform(s => s.trim().replace(/\s+/g, ' ')),
   dob: z.string().optional().default(''),
   gender: z.enum(['male', 'female', 'other']).optional().default('male'),
-  parentName: z.string().min(1, 'Parent name is required').transform(s => s.trim()),
+  parentName: z.string().min(3, 'Parent name must be at least 3 characters').transform(s => s.trim()),
   parentPhone: z.string().regex(/^\d{10}$/, 'Phone must be exactly 10 digits'),
   branchId: z.string().uuid('Invalid branch'),
   batchId: z.string().uuid('Invalid batch').optional().or(z.literal('')),

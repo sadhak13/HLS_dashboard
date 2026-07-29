@@ -70,6 +70,12 @@ export function AddPlayerModal({ isOpen, onClose, onSuccess, editingPlayer }: Ad
           if (isAdmin) {
             const { data: branchData } = await supabase.from('branches').select('id, name').order('name')
             if (branchData) setBranches(branchData)
+
+            const { data: batchData } = await (supabase as any)
+              .from('batches')
+              .select('id, branch_id, name, start_time, end_time')
+              .order('start_time')
+            if (batchData) setBatches(batchData)
           } else {
             const coachBranches = await getCoachBranches(profile.id)
             if (coachBranches.length > 1) {
@@ -79,13 +85,28 @@ export function AddPlayerModal({ isOpen, onClose, onSuccess, editingPlayer }: Ad
             } else {
               setError('You are not assigned to any branch. Please contact an admin.')
             }
-          }
 
-          const { data: batchData } = await (supabase as any)
-            .from('batches')
-            .select('id, branch_id, name, start_time, end_time')
-            .order('start_time')
-          if (batchData) setBatches(batchData)
+            // Fetch only the batches assigned to this coach
+            const { data: coachData } = await (supabase as any)
+              .from('coaches')
+              .select('id')
+              .eq('user_id', profile.id)
+              .maybeSingle()
+
+            if (coachData) {
+              const { data: coachBatchData } = await (supabase as any)
+                .from('coach_batches')
+                .select('batches (id, branch_id, name, start_time, end_time)')
+                .eq('coach_id', coachData.id)
+
+              if (coachBatchData) {
+                const batchList = coachBatchData
+                  .map((cb: any) => cb.batches)
+                  .filter(Boolean)
+                setBatches(batchList)
+              }
+            }
+          }
         } catch (err) {
           console.error('Error fetching data:', err)
           setError('Failed to load form data')
@@ -128,24 +149,53 @@ export function AddPlayerModal({ isOpen, onClose, onSuccess, editingPlayer }: Ad
 
   const filteredBatches = batches.filter(b => b.branch_id === branchId)
 
+  // Auto-select batch if coach has only one batch for the selected branch
+  useEffect(() => {
+    if (!isAdmin && filteredBatches.length === 1 && !batchId && !isEditing) {
+      setBatchId(filteredBatches[0].id)
+    }
+  }, [filteredBatches.length, branchId]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
 
+    const nameRegex = /^[a-zA-Z\s.]+$/
     if (!fullName.trim()) {
       setError('Full name is required')
       return
     }
-    if (fullName.trim().split(' ').length < 2) {
+    if (fullName.trim().split(/\s+/).length < 2) {
       setError('Please enter full name (first and last name)')
+      return
+    }
+    if (!nameRegex.test(fullName.trim())) {
+      setError('Full name should only contain letters and spaces')
+      return
+    }
+    if (!parentName.trim()) {
+      setError('Parent / Guardian name is required')
+      return
+    }
+    if (parentName.trim().length < 3) {
+      setError('Please enter a valid parent / guardian name')
       return
     }
     if (!parentPhone.trim()) {
       setError('Parent phone is required')
       return
     }
+    const phoneDigits = parentPhone.replace(/\D/g, '')
+    if (phoneDigits.length !== 10) {
+      setError('Phone number must be exactly 10 digits')
+      return
+    }
     if (!branchId) {
       setError('Branch information not available')
+      return
+    }
+    if (filteredBatches.length > 0 && !batchId) {
+      setError('Please select a batch')
       return
     }
 
@@ -284,15 +334,16 @@ export function AddPlayerModal({ isOpen, onClose, onSuccess, editingPlayer }: Ad
             </div>
           )}
 
-          {/* Batch */}
-          {branchId && filteredBatches.length > 0 && (
+          {/* Batch — hidden if coach has only 1 batch (auto-selected) */}
+          {branchId && filteredBatches.length > 1 && (
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Batch
+                Batch *
               </label>
               <select
                 value={batchId}
                 onChange={(e) => setBatchId(e.target.value)}
+                required
                 className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent dark:bg-gray-800 dark:border-gray-700 dark:text-white"
               >
                 <option value="">Select a batch...</option>
@@ -302,14 +353,25 @@ export function AddPlayerModal({ isOpen, onClose, onSuccess, editingPlayer }: Ad
               </select>
             </div>
           )}
+          {branchId && filteredBatches.length === 1 && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Batch
+              </label>
+              <div className="px-4 py-2.5 border border-gray-300 rounded-lg bg-gray-50 dark:bg-gray-800/50 dark:border-gray-700 text-gray-700 dark:text-gray-300 text-sm">
+                {filteredBatches[0].name}
+              </div>
+            </div>
+          )}
 
           {/* Parent Name */}
           <div>
             <Input
-              label="Parent / Guardian Name"
+              label="Parent / Guardian Name *"
               placeholder="e.g. Ahmed Ali"
               value={parentName}
               onChange={(e) => setParentName(e.target.value)}
+              required
             />
           </div>
 
@@ -320,9 +382,16 @@ export function AddPlayerModal({ isOpen, onClose, onSuccess, editingPlayer }: Ad
               label="Parent Phone *"
               placeholder="e.g. 9876543210"
               value={parentPhone}
-              onChange={(e) => setParentPhone(e.target.value)}
+              onChange={(e) => {
+                const val = e.target.value.replace(/\D/g, '').slice(0, 10)
+                setParentPhone(val)
+              }}
+              maxLength={10}
               required
             />
+            {parentPhone && parentPhone.length < 10 && (
+              <p className="text-xs text-amber-500 mt-1">{10 - parentPhone.length} digits remaining</p>
+            )}
           </div>
 
           {/* Aadhar */}

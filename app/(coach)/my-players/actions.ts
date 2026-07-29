@@ -27,8 +27,21 @@ export async function createCoachPlayer(formData: FormData) {
   if (!cleanFullName) {
     return { error: 'Full name is required' }
   }
+  if (cleanFullName.split(/\s+/).length < 2) {
+    return { error: 'Please enter full name (first and last name)' }
+  }
+  if (!/^[a-zA-Z\s.]+$/.test(cleanFullName)) {
+    return { error: 'Full name should only contain letters and spaces' }
+  }
+  if (!parentName?.trim() || parentName.trim().length < 3) {
+    return { error: 'Parent / Guardian name is required (minimum 3 characters)' }
+  }
   if (!cleanParentPhone) {
     return { error: 'Parent phone is required' }
+  }
+  const phoneDigits = cleanParentPhone.replace(/\D/g, '')
+  if (phoneDigits.length !== 10) {
+    return { error: 'Phone number must be exactly 10 digits' }
   }
 
   const supabase = createAdminClient()
