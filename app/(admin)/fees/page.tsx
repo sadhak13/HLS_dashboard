@@ -9,10 +9,11 @@ import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { Pagination } from '@/components/ui/Pagination';
 import { useToast } from '@/components/ui/Toast';
-import { IndianRupee, Plus, TrendingUp, Clock, AlertCircle, Zap, ChevronLeft, ChevronRight } from 'lucide-react';
+import { IndianRupee, Plus, TrendingUp, Clock, AlertCircle, Zap, ChevronLeft, ChevronRight, FileSpreadsheet } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { generateNextMonthFeesForAllBranches } from '@/app/(admin)/fees/actions';
 import { format, addMonths, subMonths, isAfter, startOfMonth } from 'date-fns';
+import XLSX from 'xlsx-js-style';
 
 function StatCard({ label, value, icon, color }: { label: string; value: string; icon: React.ReactNode; color: string }) {
   return (
@@ -57,6 +58,7 @@ export default function FeesPage() {
 
   // Stats are fetched separately to avoid coupling with pagination
   const [stats, setStats] = useState({ collected: 0, pending: 0, overdue: 0 });
+  const [isExporting, setIsExporting] = useState(false);
 
   const supabase = createClient();
 
@@ -226,6 +228,78 @@ export default function FeesPage() {
     setCurrentPage(1);
   };
 
+  const handleExportExcel = async () => {
+    setIsExporting(true);
+
+    try {
+      let query = (supabase as any)
+        .from('fees')
+        .select('amount, status, mode_of_payment, paid_date, players (full_name, parent_phone, date_of_birth, batch_id, batches (name)), branches (name)')
+        .eq('month', selectedMonthStr)
+        .order('created_at', { ascending: true });
+
+      if (filterBranch !== 'all') {
+        query = query.eq('branch_id', filterBranch);
+      }
+
+      if (filterStatus !== 'all') {
+        query = query.eq('status', filterStatus);
+      }
+
+      const { data, error } = await query;
+
+      if (error || !data || data.length === 0) {
+        showToast(error ? 'Failed to fetch data for export.' : 'No records to export.');
+        setIsExporting(false);
+        return;
+      }
+
+      const rows = data.map((fee: any, index: number) => ({
+        'S.No': index + 1,
+        'Player Name': fee.players?.full_name ?? '—',
+        'Phone Number': fee.players?.parent_phone ?? '—',
+        'Date of Birth': fee.players?.date_of_birth
+          ? new Date(fee.players.date_of_birth).toLocaleDateString('en-IN')
+          : '—',
+        'Batch': fee.players?.batches?.name ?? '—',
+        'Branch': fee.branches?.name ?? '—',
+        'Amount (₹)': fee.amount,
+        'Status': fee.status.charAt(0).toUpperCase() + fee.status.slice(1),
+        'Mode of Payment': fee.mode_of_payment
+          ? fee.mode_of_payment === 'cash+online' ? 'Cash + Online' : fee.mode_of_payment.charAt(0).toUpperCase() + fee.mode_of_payment.slice(1)
+          : '—',
+        'Paid On': fee.paid_date
+          ? new Date(fee.paid_date).toLocaleDateString('en-IN')
+          : '—',
+      }));
+
+      const worksheet = XLSX.utils.json_to_sheet(rows);
+
+      const headerCols = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
+      headerCols.forEach(col => {
+        const cell = worksheet[`${col}1`];
+        if (cell) cell.s = { font: { bold: true } };
+      });
+
+      const workbook = XLSX.utils.book_new();
+
+      const branchName = filterBranch === 'all'
+        ? 'All Branches'
+        : branches.find(b => b.id === filterBranch)?.name ?? 'Branch';
+      const sheetName = branchName.substring(0, 31);
+
+      XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
+
+      const statusLabel = filterStatus === 'all' ? '' : `_${filterStatus.charAt(0).toUpperCase() + filterStatus.slice(1)}`;
+      const fileName = `Fees_Report_${selectedMonthDisplay.replace(' ', '_')}_${branchName.replace(/\s+/g, '_')}${statusLabel}.xlsx`;
+      XLSX.writeFile(workbook, fileName);
+    } catch (err) {
+      showToast('Failed to generate Excel report.');
+    }
+
+    setIsExporting(false);
+  };
+
   const branchBatches = filterBranch === 'all'
     ? []
     : batches.filter((b) => b.branch_id === filterBranch);
@@ -233,30 +307,51 @@ export default function FeesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Fee Management</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400">Track monthly fee collection across all branches.</p>
+      {/* Header */}
+      <div className="flex flex-col gap-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Fee Management</h1>
+            <p className="text-sm text-gray-500 dark:text-gray-400 hidden sm:block">Track monthly fee collection across all branches.</p>
+          </div>
+
+          {/* Desktop action buttons */}
+          <div className="hidden sm:flex gap-2">
+            <Button onClick={() => setIsModalOpen(true)} className="gap-2">
+              <Plus className="w-4 h-4" />
+              Create Fee
+            </Button>
+            {canGenerate && (
+              <Button onClick={handleGenerateNextMonthFees} isLoading={isGeneratingFees} variant="secondary" className="gap-2">
+                <Zap className="w-4 h-4" />
+                Generate {selectedMonthDisplay}
+              </Button>
+            )}
+            <Button onClick={handleExportExcel} isLoading={isExporting} variant="secondary" className="gap-2">
+              <FileSpreadsheet className="w-4 h-4" />
+              Download Excel
+            </Button>
+          </div>
         </div>
-        
-        {/* Month Navigation & Branch/Batch Filter */}
-        <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full sm:w-auto">
-          <div className="flex items-center justify-between bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-1">
+
+        {/* Month Navigation & Filters */}
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+          <div className="flex items-center bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-1">
             <Button variant="ghost" onClick={handlePrevMonth} className="p-2 h-auto">
-              <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5" />
+              <ChevronLeft className="w-4 h-4" />
             </Button>
             <div className="text-xs sm:text-sm font-medium min-w-[90px] sm:min-w-[120px] text-center text-gray-900 dark:text-white">
               {selectedMonthDisplay}
             </div>
             <Button variant="ghost" onClick={handleNextMonth} disabled={isNextDisabled} className="p-2 h-auto">
-              <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5" />
+              <ChevronRight className="w-4 h-4" />
             </Button>
           </div>
 
           <select
             value={filterBranch}
             onChange={(e) => handleBranchChange(e.target.value)}
-            className="px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-xs sm:text-sm font-medium text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-green-500/50 cursor-pointer"
+            className="px-3 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-xs sm:text-sm font-medium text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-green-500/50 cursor-pointer"
           >
             <option value="all">All Branches</option>
             {branches.map((b) => (
@@ -268,7 +363,7 @@ export default function FeesPage() {
             <select
               value={filterBatch}
               onChange={(e) => handleBatchChange(e.target.value)}
-              className="px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-xs sm:text-sm font-medium text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-green-500/50 cursor-pointer"
+              className="px-3 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-xs sm:text-sm font-medium text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-green-500/50 cursor-pointer"
             >
               <option value="all">All Batches</option>
               {branchBatches.map((b) => (
@@ -278,17 +373,22 @@ export default function FeesPage() {
           )}
         </div>
 
-        <div className="flex gap-2 flex-wrap">
-          <Button onClick={() => setIsModalOpen(true)} className="gap-2">
-            <Plus className="w-4 h-4" />
-            Create Fee
+        {/* Mobile action buttons */}
+        <div className="flex sm:hidden gap-2">
+          <Button onClick={() => setIsModalOpen(true)} size="sm" className="gap-1.5 flex-1">
+            <Plus className="w-3.5 h-3.5" />
+            Create
           </Button>
           {canGenerate && (
-            <Button onClick={handleGenerateNextMonthFees} isLoading={isGeneratingFees} variant="secondary" className="gap-2">
-              <Zap className="w-4 h-4" />
-              Generate {selectedMonthDisplay}
+            <Button onClick={handleGenerateNextMonthFees} isLoading={isGeneratingFees} variant="secondary" size="sm" className="gap-1.5 flex-1">
+              <Zap className="w-3.5 h-3.5" />
+              Generate
             </Button>
           )}
+          <Button onClick={handleExportExcel} isLoading={isExporting} variant="secondary" size="sm" className="gap-1.5 flex-1">
+            <FileSpreadsheet className="w-3.5 h-3.5" />
+            Excel
+          </Button>
         </div>
       </div>
 
