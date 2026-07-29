@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/context/AuthContext';
 import {
   CheckCircle, XCircle, Send, CalendarDays, Users, Search,
-  Clock, CheckCheck, X, ChevronLeft, ChevronRight, Filter
+  Clock, CheckCheck, X, ChevronLeft, ChevronRight, Filter, Pencil
 } from 'lucide-react';
 import { clientCache } from '@/lib/clientCache';
 
@@ -183,6 +183,7 @@ export default function CoachAttendancePage() {
   });
 
   const [submitSuccess, setSubmitSuccess] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   
   const [markedDates, setMarkedDates] = useState<Set<string>>(() => {
@@ -277,6 +278,7 @@ export default function CoachAttendancePage() {
     if (players.length === 0) setIsLoading(true);
     setAlreadySubmitted(false);
     setSubmitSuccess(false);
+    setIsEditing(false);
     setAttendance({});
 
     const { data: batchInfo } = await (supabase as any)
@@ -361,8 +363,10 @@ export default function CoachAttendancePage() {
     }
   }, [selectedBatchId, selectedDate, loadPlayersForBatch]);
 
+  const canModify = !alreadySubmitted || isEditing;
+
   const toggle = (playerId: string) => {
-    if (alreadySubmitted) return;
+    if (!canModify) return;
     setAttendance((prev) => ({
       ...prev,
       [playerId]: prev[playerId] === 'present' ? 'absent' : 'present',
@@ -370,14 +374,14 @@ export default function CoachAttendancePage() {
   };
 
   const markAllPresent = () => {
-    if (alreadySubmitted) return;
+    if (!canModify) return;
     const all: AttendanceState = {};
     players.forEach(p => { all[p.id] = 'present'; });
     setAttendance(all);
   };
 
   const markAllAbsent = () => {
-    if (alreadySubmitted) return;
+    if (!canModify) return;
     const all: AttendanceState = {};
     players.forEach(p => { all[p.id] = 'absent'; });
     setAttendance(all);
@@ -395,12 +399,29 @@ export default function CoachAttendancePage() {
       status: attendance[p.id] ?? 'present',
     }));
 
-    const { error } = await (supabase as any).from('attendance').insert(records);
+    let error;
+    if (isEditing) {
+      const updates = records.map(async (record) => {
+        const { error: err } = await (supabase as any)
+          .from('attendance')
+          .update({ status: record.status })
+          .eq('player_id', record.player_id)
+          .eq('batch_id', record.batch_id)
+          .eq('date', record.date);
+        return err;
+      });
+      const results = await Promise.all(updates);
+      error = results.find(e => e !== null) || null;
+    } else {
+      const result = await (supabase as any).from('attendance').insert(records);
+      error = result.error;
+    }
 
     if (!error) {
       setAlreadySubmitted(true);
       setSubmitSuccess(true);
-      
+      setIsEditing(false);
+
       const newMarkedDates = new Set([...markedDates, selectedDate]);
       setMarkedDates(newMarkedDates);
       if (cacheKeyMarked) {
@@ -560,12 +581,18 @@ export default function CoachAttendancePage() {
                   )}
                 </div>
               </div>
-              {isToday && !alreadySubmitted && selectedBatchId && (
+              {isToday && !alreadySubmitted && selectedBatchId && !isEditing && (
                 <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs font-semibold text-amber-400">
                   Pending
                 </span>
               )}
-              {alreadySubmitted && (
+              {isEditing && (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs font-semibold text-amber-400">
+                  <Pencil className="w-3.5 h-3.5" />
+                  Editing
+                </span>
+              )}
+              {alreadySubmitted && !isEditing && (
                 <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold ${
                   submitSuccess
                     ? 'bg-green-500/10 border border-green-500/20 text-green-400'
@@ -600,7 +627,7 @@ export default function CoachAttendancePage() {
           {!isLoading && selectedBatchId && (
             <>
               {/* Search & Actions */}
-              {players.length > 0 && !alreadySubmitted && isToday && (
+              {players.length > 0 && canModify && isToday && (
                 <div className="rounded-2xl backdrop-blur-2xl bg-white/[0.03] border border-white/10 p-4 mb-4">
                   <div className="flex flex-col sm:flex-row gap-3">
                     <div className="flex-1 relative">
@@ -665,7 +692,7 @@ export default function CoachAttendancePage() {
                     {filteredPlayers.map((player, index) => {
                       const status = attendance[player.id];
                       const isPresent = status === 'present';
-                      const canToggle = !alreadySubmitted && isToday;
+                      const canToggle = canModify && isToday;
 
                       return (
                         <button
@@ -716,7 +743,7 @@ export default function CoachAttendancePage() {
                 </div>
               )}
 
-              {/* Submit Button */}
+              {/* Submit / Edit Button */}
               {!alreadySubmitted && isToday && players.length > 0 && (
                 <div className="mt-4 sm:mt-6">
                   <button
@@ -726,6 +753,41 @@ export default function CoachAttendancePage() {
                   >
                     <Send className="w-5 h-5" />
                     {isSubmitting ? 'Submitting...' : 'Save Attendance'}
+                  </button>
+                </div>
+              )}
+
+              {alreadySubmitted && isToday && !isEditing && players.length > 0 && (
+                <div className="mt-4 sm:mt-6">
+                  <button
+                    onClick={() => setIsEditing(true)}
+                    className="w-full flex items-center justify-center gap-3 py-4 px-6 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white font-bold rounded-2xl text-base transition-all shadow-xl shadow-amber-500/20 hover:shadow-amber-500/30 hover:scale-[1.01] active:scale-[0.99]"
+                  >
+                    <Pencil className="w-5 h-5" />
+                    Edit Attendance
+                  </button>
+                </div>
+              )}
+
+              {isEditing && players.length > 0 && (
+                <div className="mt-4 sm:mt-6 flex gap-3">
+                  <button
+                    onClick={() => {
+                      setIsEditing(false);
+                      if (selectedBatchId) loadPlayersForBatch(selectedBatchId, selectedDate);
+                    }}
+                    className="flex-1 flex items-center justify-center gap-3 py-4 px-6 bg-white/[0.05] border border-white/10 hover:bg-white/[0.1] text-white font-bold rounded-2xl text-base transition-all"
+                  >
+                    <X className="w-5 h-5" />
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleSubmit}
+                    disabled={isSubmitting}
+                    className="flex-[2] flex items-center justify-center gap-3 py-4 px-6 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold rounded-2xl text-base transition-all shadow-xl shadow-green-500/20 hover:shadow-green-500/30 hover:scale-[1.01] active:scale-[0.99]"
+                  >
+                    <Send className="w-5 h-5" />
+                    {isSubmitting ? 'Updating...' : 'Update Attendance'}
                   </button>
                 </div>
               )}
