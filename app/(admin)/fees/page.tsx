@@ -254,44 +254,58 @@ export default function FeesPage() {
         return;
       }
 
-      const rows = data.map((fee: any, index: number) => ({
-        'S.No': index + 1,
-        'Player Name': fee.players?.full_name ?? '—',
-        'Phone Number': fee.players?.parent_phone ?? '—',
-        'Date of Birth': fee.players?.date_of_birth
-          ? new Date(fee.players.date_of_birth).toLocaleDateString('en-IN')
-          : '—',
-        'Batch': fee.players?.batches?.name ?? '—',
-        'Branch': fee.branches?.name ?? '—',
-        'Amount (₹)': fee.amount,
-        'Status': fee.status.charAt(0).toUpperCase() + fee.status.slice(1),
-        'Mode of Payment': fee.mode_of_payment
-          ? fee.mode_of_payment === 'cash+online' ? 'Cash + Online' : fee.mode_of_payment.charAt(0).toUpperCase() + fee.mode_of_payment.slice(1)
-          : '—',
-        'Paid On': fee.paid_date
-          ? new Date(fee.paid_date).toLocaleDateString('en-IN')
-          : '—',
-      }));
-
-      const worksheet = XLSX.utils.json_to_sheet(rows);
-
       const headerCols = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
-      headerCols.forEach(col => {
-        const cell = worksheet[`${col}1`];
-        if (cell) cell.s = { font: { bold: true } };
-      });
-
       const workbook = XLSX.utils.book_new();
 
-      const branchName = filterBranch === 'all'
-        ? 'All Branches'
-        : branches.find(b => b.id === filterBranch)?.name ?? 'Branch';
-      const sheetName = branchName.substring(0, 31);
+      const buildSheet = (fees: any[]) => {
+        const rows = fees.map((fee: any, index: number) => ({
+          'S.No': index + 1,
+          'Player Name': fee.players?.full_name ?? '—',
+          'Phone Number': fee.players?.parent_phone ?? '—',
+          'Date of Birth': fee.players?.date_of_birth
+            ? new Date(fee.players.date_of_birth).toLocaleDateString('en-IN')
+            : '—',
+          'Batch': fee.players?.batches?.name ?? '—',
+          'Branch': fee.branches?.name ?? '—',
+          'Amount (₹)': fee.amount,
+          'Status': fee.status.charAt(0).toUpperCase() + fee.status.slice(1),
+          'Mode of Payment': fee.mode_of_payment
+            ? fee.mode_of_payment === 'cash+online' ? 'Cash + Online' : fee.mode_of_payment.charAt(0).toUpperCase() + fee.mode_of_payment.slice(1)
+            : '—',
+          'Paid On': fee.paid_date
+            ? new Date(fee.paid_date).toLocaleDateString('en-IN')
+            : '—',
+        }));
 
-      XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
+        const worksheet = XLSX.utils.json_to_sheet(rows);
+        headerCols.forEach(col => {
+          const cell = worksheet[`${col}1`];
+          if (cell) cell.s = { font: { bold: true } };
+        });
+        return worksheet;
+      };
+
+      if (filterBranch === 'all') {
+        const grouped: Record<string, any[]> = {};
+        data.forEach((fee: any) => {
+          const name = fee.branches?.name ?? 'Unknown';
+          if (!grouped[name]) grouped[name] = [];
+          grouped[name].push(fee);
+        });
+
+        Object.entries(grouped).forEach(([branchName, fees]) => {
+          const sheet = buildSheet(fees);
+          XLSX.utils.book_append_sheet(workbook, sheet, branchName.substring(0, 31));
+        });
+      } else {
+        const branchName = branches.find(b => b.id === filterBranch)?.name ?? 'Branch';
+        const sheet = buildSheet(data);
+        XLSX.utils.book_append_sheet(workbook, sheet, branchName.substring(0, 31));
+      }
 
       const statusLabel = filterStatus === 'all' ? '' : `_${filterStatus.charAt(0).toUpperCase() + filterStatus.slice(1)}`;
-      const fileName = `Fees_Report_${selectedMonthDisplay.replace(' ', '_')}_${branchName.replace(/\s+/g, '_')}${statusLabel}.xlsx`;
+      const branchLabel = filterBranch === 'all' ? 'All_Branches' : (branches.find(b => b.id === filterBranch)?.name ?? 'Branch').replace(/\s+/g, '_');
+      const fileName = `Fees_Report_${selectedMonthDisplay.replace(' ', '_')}_${branchLabel}${statusLabel}.xlsx`;
       XLSX.writeFile(workbook, fileName);
     } catch (err) {
       showToast('Failed to generate Excel report.');
