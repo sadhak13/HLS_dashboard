@@ -139,7 +139,7 @@ export function AddPlayerModal({ isOpen, onClose, onSuccess, editingPlayer }: Ad
       setParentName('')
       setParentPhone('')
       if (isAdmin) setBranchId('')
-      setBatchId('')
+      setBatchId('') // will be re-set by the auto-select effect once batches load
       setStatus('active')
       setEnrolledDate(new Date().toISOString().split('T')[0])
       setAadharNumber('')
@@ -154,7 +154,7 @@ export function AddPlayerModal({ isOpen, onClose, onSuccess, editingPlayer }: Ad
     if (!isAdmin && filteredBatches.length === 1 && !batchId && !isEditing) {
       setBatchId(filteredBatches[0].id)
     }
-  }, [filteredBatches.length, branchId]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [filteredBatches.length, branchId, batches]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()

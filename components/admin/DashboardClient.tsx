@@ -6,7 +6,7 @@ import { GlassCard } from '@/components/ui/GlassCard';
 import { PeriodPicker, PeriodRange, getDefaultPeriod } from '@/components/admin/PeriodPicker';
 import { Users, MapPin, IndianRupee, Activity, UserPlus, AlertCircle, TrendingUp } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
-import { formatDistanceToNow, parseISO, format, eachMonthOfInterval } from 'date-fns';
+import { formatDistanceToNow, parseISO, format, eachMonthOfInterval, startOfYear, endOfMonth } from 'date-fns';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Sector } from 'recharts';
 import { useTheme } from '@/context/ThemeContext';
 
@@ -21,6 +21,7 @@ type ActivityItem = {
 type ChartData = {
   name: string;
   revenue: number;
+  monthKey: string;
 };
 
 const PIE_COLORS = [
@@ -58,13 +59,13 @@ export function DashboardClient({ branchesMap, initialBranchesCount }: Dashboard
     const fromDate = p.from;
     const toDate = p.to;
 
-    // Generate month keys for the chart based on the period range
-    const months = eachMonthOfInterval({
-      start: parseISO(fromDate),
-      end: parseISO(toDate),
-    });
-    const monthKeys = months.map(m => format(m, 'yyyy-MM'));
-    const monthLabels = months.map(m => format(m, 'MMM'));
+    // Year-to-date range for the chart (always Jan 1 → today, independent of period picker)
+    const now = new Date();
+    const ytdFrom = format(startOfYear(now), 'yyyy-MM-dd');
+    const ytdTo = format(endOfMonth(now), 'yyyy-MM-dd');
+    const ytdMonths = eachMonthOfInterval({ start: parseISO(ytdFrom), end: now });
+    const ytdMonthKeys = ytdMonths.map(m => format(m, 'yyyy-MM'));
+    const ytdMonthLabels = ytdMonths.map(m => format(m, 'MMM'));
 
     const [
       { count: activePlayers },
@@ -76,6 +77,7 @@ export function DashboardClient({ branchesMap, initialBranchesCount }: Dashboard
       { data: recentPlayers },
       { data: recentFees },
       { data: playersByBranch },
+      { data: ytdFees },
     ] = await Promise.all([
       supabase.from('players').select('*', { count: 'exact', head: true }).eq('status', 'active'),
       (supabase as any).from('fees').select('amount, month').eq('status', 'paid').gte('paid_date', fromDate).lte('paid_date', toDate + 'T23:59:59'),
@@ -86,6 +88,8 @@ export function DashboardClient({ branchesMap, initialBranchesCount }: Dashboard
       supabase.from('players').select('id, full_name, branch_id, created_at').order('created_at', { ascending: false }).limit(5),
       (supabase as any).from('fees').select('id, amount, branch_id, created_at').eq('status', 'paid').order('created_at', { ascending: false }).limit(5),
       supabase.from('players').select('branch_id').eq('status', 'active'),
+      // Year-to-date fees for the chart (always full year regardless of period picker)
+      (supabase as any).from('fees').select('amount, month').eq('status', 'paid').gte('paid_date', ytdFrom).lte('paid_date', ytdTo + 'T23:59:59'),
     ]);
 
     // Active players (always current count)
@@ -109,16 +113,17 @@ export function DashboardClient({ branchesMap, initialBranchesCount }: Dashboard
     // New enrollments
     setNewEnrollments(enrolledPlayers?.length || 0);
 
-    // Chart data: revenue per month within the range
+    // Chart data: always shows all months Jan → now (year-to-date)
     const revenueByMonth: Record<string, number> = {};
-    monthKeys.forEach(mk => { revenueByMonth[mk] = 0; });
-    (paidFees ?? []).forEach((f: any) => {
+    ytdMonthKeys.forEach(mk => { revenueByMonth[mk] = 0; });
+    (ytdFees ?? []).forEach((f: any) => {
       if (f.month && revenueByMonth[f.month] !== undefined) {
         revenueByMonth[f.month] += f.amount;
       }
     });
-    const chartResult: ChartData[] = monthKeys.map((mk, i) => ({
-      name: monthLabels[i],
+    const chartResult: ChartData[] = ytdMonthKeys.map((mk, i) => ({
+      name: ytdMonthLabels[i],
+      monthKey: mk,
       revenue: revenueByMonth[mk] || 0,
     }));
     setChartData(chartResult);
@@ -329,14 +334,23 @@ export function DashboardClient({ branchesMap, initialBranchesCount }: Dashboard
                     />
                     <Bar
                       dataKey="revenue"
-                      fill="url(#greenGradient)"
                       radius={[8, 8, 0, 0]}
-                      barSize={50}
-                    />
+                      barSize={40}
+                    >
+                      {chartData.map((entry, index) => {
+                        const inRange = entry.monthKey >= period.from.slice(0, 7) && entry.monthKey <= period.to.slice(0, 7);
+                        return (
+                          <Cell
+                            key={`bar-cell-${index}`}
+                            fill={inRange ? 'url(#greenGradient)' : (theme === 'dark' ? 'rgba(16,185,129,0.25)' : 'rgba(16,185,129,0.18)')}
+                          />
+                        );
+                      })}
+                    </Bar>
                     <defs>
                       <linearGradient id="greenGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#10b981" stopOpacity={0.8} />
-                        <stop offset="100%" stopColor="#059669" stopOpacity={0.6} />
+                        <stop offset="0%" stopColor="#10b981" stopOpacity={0.9} />
+                        <stop offset="100%" stopColor="#059669" stopOpacity={0.65} />
                       </linearGradient>
                     </defs>
                   </BarChart>
@@ -347,6 +361,9 @@ export function DashboardClient({ branchesMap, initialBranchesCount }: Dashboard
                 </div>
               )}
             </div>
+            <p className="text-[11px] text-gray-500 mt-2 text-right pr-1">
+              Chart shows year-to-date · <span className="text-green-400">Highlighted</span> = selected period
+            </p>
           </GlassCard>
         </div>
 
@@ -363,9 +380,8 @@ export function DashboardClient({ branchesMap, initialBranchesCount }: Dashboard
                 <ul className="space-y-3">
                   {activities.map((activity) => (
                     <li key={activity.id} className="flex items-start gap-3 p-2.5 sm:p-3 rounded-xl hover:bg-white/5 transition-colors">
-                      <div className={`w-2 h-2 mt-2 rounded-full flex-shrink-0 ${
-                        activity.type === 'fee' ? 'bg-green-500 shadow-lg shadow-green-500/50' : 'bg-blue-500 shadow-lg shadow-blue-500/50'
-                      }`} />
+                      <div className={`w-2 h-2 mt-2 rounded-full flex-shrink-0 ${activity.type === 'fee' ? 'bg-green-500 shadow-lg shadow-green-500/50' : 'bg-blue-500 shadow-lg shadow-blue-500/50'
+                        }`} />
                       <div className="flex-1 min-w-0">
                         <p className="text-xs sm:text-sm font-medium text-white leading-snug">{activity.title}</p>
                         <p className="text-[11px] sm:text-xs text-gray-400 mt-1">
@@ -485,9 +501,8 @@ export function DashboardClient({ branchesMap, initialBranchesCount }: Dashboard
                   <button
                     key={branch.name}
                     onMouseEnter={() => setActivePieIndex(i)}
-                    className={`flex items-center gap-2 px-2 py-1 rounded-lg transition-all text-xs ${
-                      activePieIndex === i ? 'bg-white/10' : 'hover:bg-white/5'
-                    }`}
+                    className={`flex items-center gap-2 px-2 py-1 rounded-lg transition-all text-xs ${activePieIndex === i ? 'bg-white/10' : 'hover:bg-white/5'
+                      }`}
                   >
                     <span
                       className="w-2.5 h-2.5 rounded-full shrink-0"
