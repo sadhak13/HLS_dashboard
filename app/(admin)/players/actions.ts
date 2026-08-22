@@ -98,7 +98,10 @@ export async function updateAdminPlayer(playerId: string, formData: FormData) {
       parent_name: parentName?.trim(),
       parent_phone: cleanParentPhone,
       status: status,
-      aadhar_number: (aadharNumber && aadharNumber.length === 12) ? `XXXX-XXXX-${aadharNumber.slice(-4)}` : null,
+    }
+    // Only overwrite aadhar_number if admin explicitly provided a new value
+    if (aadharNumber && aadharNumber.length === 12) {
+      updateData.aadhar_number = `XXXX-XXXX-${aadharNumber.slice(-4)}`
     }
 
     const { error: updateError } = await (supabase as any)

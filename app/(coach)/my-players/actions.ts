@@ -147,7 +147,10 @@ export async function updateCoachPlayer(playerId: string, formData: FormData) {
       parent_name: parentName?.trim() || null,
       parent_phone: cleanParentPhone,
       batch_id: batchId || null,
-      aadhar_number: (aadharNumber && aadharNumber.length === 12) ? `XXXX-XXXX-${aadharNumber.slice(-4)}` : null,
+    }
+    // Only overwrite aadhar_number if coach explicitly provided a new value
+    if (aadharNumber && aadharNumber.length === 12) {
+      updateData.aadhar_number = `XXXX-XXXX-${aadharNumber.slice(-4)}`
     }
 
     const { error: updateError } = await (supabase as any)
@@ -224,7 +227,7 @@ export async function createInitialPlayerFee(
         .eq('id', existing.id)
 
       if (updateError) throw updateError
-      
+
       revalidatePath('/my-fees')
       return { success: true, feeId: existing.id }
     } else {

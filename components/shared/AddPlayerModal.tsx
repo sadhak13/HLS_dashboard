@@ -131,7 +131,7 @@ export function AddPlayerModal({ isOpen, onClose, onSuccess, editingPlayer }: Ad
       setBatchId(editingPlayer.batch_id || '')
       setStatus((editingPlayer.status as any) || 'active')
       setEnrolledDate(editingPlayer.enrolled_date || '')
-      setAadharNumber(editingPlayer.aadhar_number || '')
+      setAadharNumber('') // Always blank on edit — masked DB value can't be pre-filled
     } else {
       setFullName('')
       setDob('')
@@ -211,7 +211,9 @@ export function AddPlayerModal({ isOpen, onClose, onSuccess, editingPlayer }: Ad
     formData.append('batchId', batchId)
     formData.append('status', status)
     formData.append('enrolledDate', enrolledDate)
-    formData.append('aadharNumber', aadharNumber)
+    if (aadharNumber) {
+      formData.append('aadharNumber', aadharNumber) // only send if user typed a new value
+    }
 
     try {
       if (isEditing) {
@@ -407,6 +409,13 @@ export function AddPlayerModal({ isOpen, onClose, onSuccess, editingPlayer }: Ad
               }}
               maxLength={12}
             />
+            {isEditing && !aadharNumber && (
+              <p className="text-xs text-gray-400 mt-1">
+                {editingPlayer?.aadhar_number
+                  ? <>Currently saved: <span className="font-mono">{editingPlayer.aadhar_number}</span> — leave blank to keep it</>
+                  : 'Not saved yet — enter one if available'}
+              </p>
+            )}
             {aadharNumber && aadharNumber.length !== 12 && (
               <p className="text-xs text-amber-500 mt-1">Aadhar must be 12 digits</p>
             )}
