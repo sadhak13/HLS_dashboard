@@ -362,7 +362,7 @@ export default function MyFeesPage() {
         ) : filteredFees.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 px-4">
             <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center mb-4">
-              <IndianRupee className="w-8 h-8 text-gray-500" />
+              <Users className="w-8 h-8 text-gray-500" />
             </div>
             <p className="text-white font-medium mb-1">No fee records</p>
             <p className="text-sm text-gray-400 text-center">No records found for {selectedMonthDisplay}.</p>
