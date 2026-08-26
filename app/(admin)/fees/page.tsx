@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { FeeTable } from '@/components/admin/FeeTable';
 import { AddFeeModal } from '@/components/admin/AddFeeModal';
 import { EditFeeModal, FeeRecord } from '@/components/admin/EditFeeModal';
@@ -9,7 +9,7 @@ import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { Pagination } from '@/components/ui/Pagination';
 import { useToast } from '@/components/ui/Toast';
-import { IndianRupee, Plus, TrendingUp, Clock, AlertCircle, Zap, ChevronLeft, ChevronRight, FileSpreadsheet, Users, UserX } from 'lucide-react';
+import { IndianRupee, Plus, TrendingUp, Clock, AlertCircle, Zap, ChevronLeft, ChevronRight, FileSpreadsheet, Users, UserX, Search } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { generateNextMonthFeesForAllBranches } from '@/app/(admin)/fees/actions';
 import { format, addMonths, subMonths, isAfter, startOfMonth } from 'date-fns';
@@ -53,6 +53,9 @@ export default function FeesPage() {
   const [markPaidFeeId, setMarkPaidFeeId] = useState<string | null>(null);
   const [markPaidMode, setMarkPaidMode] = useState<'cash' | 'online' | 'cash+online'>('cash');
   const [isMarkingPaid, setIsMarkingPaid] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 20;
 
@@ -73,12 +76,13 @@ export default function FeesPage() {
     fetchFilters();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const fetchFees = useCallback(async (page: number, status: string, branch: string, batch: string) => {
+  const fetchFees = useCallback(async (page: number, status: string, branch: string, batch: string, search: string) => {
     setIsLoading(true);
     const from = (page - 1) * ITEMS_PER_PAGE;
     const to = from + ITEMS_PER_PAGE - 1;
 
-    const selectStr = batch !== 'all'
+    const needsInner = batch !== 'all' || search.trim() !== '';
+    const selectStr = needsInner
       ? '*, players!inner (full_name, branch_id, batch_id, status), branches (name)'
       : '*, players (full_name, branch_id, batch_id, status), branches (name)';
 
@@ -99,6 +103,10 @@ export default function FeesPage() {
 
     if (batch !== 'all') {
       query = query.eq('players.batch_id', batch);
+    }
+
+    if (search.trim() !== '') {
+      query = (query as any).ilike('players.full_name', `%${search.trim()}%`);
     }
 
     const { data, error, count } = await query;
@@ -143,9 +151,9 @@ export default function FeesPage() {
   }, [selectedMonthStr]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    fetchFees(currentPage, filterStatus, filterBranch, filterBatch);
+    fetchFees(currentPage, filterStatus, filterBranch, filterBatch, debouncedSearch);
     fetchStats(filterBranch, filterBatch);
-  }, [fetchFees, fetchStats, currentPage, filterStatus, filterBranch, filterBatch]);
+  }, [fetchFees, fetchStats, currentPage, filterStatus, filterBranch, filterBatch, debouncedSearch]);
 
   const handleMarkPaidClick = (feeId: string) => {
     setMarkPaidFeeId(feeId);
@@ -166,7 +174,7 @@ export default function FeesPage() {
       .eq('id', markPaidFeeId);
 
     if (!error) {
-      fetchFees(currentPage, filterStatus, filterBranch, filterBatch);
+      fetchFees(currentPage, filterStatus, filterBranch, filterBatch, debouncedSearch);
       fetchStats(filterBranch, filterBatch);
     }
     setIsMarkingPaid(false);
@@ -187,7 +195,7 @@ export default function FeesPage() {
       setGenerateMessage(`✓ Successfully created fees for ${result.createdCount} players in ${selectedMonthDisplay}`);
       setTimeout(() => {
         setGenerateMessage('');
-        fetchFees(currentPage, filterStatus, filterBranch, filterBatch);
+        fetchFees(currentPage, filterStatus, filterBranch, filterBatch, debouncedSearch);
         fetchStats(filterBranch, filterBatch);
       }, 2000);
     }
@@ -228,6 +236,15 @@ export default function FeesPage() {
   const handleBatchChange = (batchId: string) => {
     setFilterBatch(batchId);
     setCurrentPage(1);
+  };
+
+  const handleSearchChange = (value: string) => {
+    setSearchQuery(value);
+    setCurrentPage(1);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      setDebouncedSearch(value);
+    }, 300);
   };
 
   const handleExportExcel = async () => {
@@ -453,6 +470,27 @@ export default function FeesPage() {
         />
       </div>
 
+      {/* Search bar */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+        <input
+          type="text"
+          placeholder="Search by player name..."
+          value={searchQuery}
+          onChange={(e) => handleSearchChange(e.target.value)}
+          className="w-full pl-9 pr-10 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500/50"
+        />
+        {searchQuery && (
+          <button
+            onClick={() => handleSearchChange('')}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-lg leading-none flex items-center justify-center w-6 h-6"
+            aria-label="Clear search"
+          >
+            &times;
+          </button>
+        )}
+      </div>
+
       {/* Filter tabs */}
       {fees.length > 0 && (
         <div className="flex gap-2 flex-wrap">
@@ -519,7 +557,7 @@ export default function FeesPage() {
       <AddFeeModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        onSuccess={() => { fetchFees(currentPage, filterStatus, filterBranch, filterBatch); fetchStats(filterBranch, filterBatch); }}
+        onSuccess={() => { fetchFees(currentPage, filterStatus, filterBranch, filterBatch, debouncedSearch); fetchStats(filterBranch, filterBatch); }}
       />
 
       <EditFeeModal
@@ -528,7 +566,7 @@ export default function FeesPage() {
           setIsEditModalOpen(false);
           setEditingFee(null);
         }}
-        onSuccess={() => { fetchFees(currentPage, filterStatus, filterBranch, filterBatch); fetchStats(filterBranch, filterBatch); }}
+        onSuccess={() => { fetchFees(currentPage, filterStatus, filterBranch, filterBatch, debouncedSearch); fetchStats(filterBranch, filterBatch); }}
         fee={editingFee}
       />
 
