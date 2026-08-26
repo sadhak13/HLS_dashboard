@@ -8,8 +8,7 @@ import { EditFeeModal, FeeRecord } from '@/components/admin/EditFeeModal';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { Pagination } from '@/components/ui/Pagination';
-import { IndianRupee, Zap, ChevronLeft, ChevronRight, TrendingUp, Clock } from 'lucide-react';
-import { FeeReminders } from '@/components/coach/FeeReminders';
+import { Users, Zap, ChevronLeft, ChevronRight, TrendingUp, Clock, Search } from 'lucide-react';
 import { generateFeesForBranches } from '@/app/(admin)/fees/actions';
 import { format, addMonths, subMonths, isAfter, startOfMonth } from 'date-fns';
 import { getCoachBranches, getCoachBatchInfo } from '@/lib/coach';
@@ -45,6 +44,8 @@ export default function MyFeesPage() {
   const [branchIds, setBranchIds] = useState<string[]>([]);
   const [coachBranches, setCoachBranches] = useState<{ id: string; name: string }[]>([]);
   const [selectedBranchFilter, setSelectedBranchFilter] = useState<string>('all');
+  const [coachBatchList, setCoachBatchList] = useState<{ id: string; name: string }[]>([]);
+  const [selectedBatchFilter, setSelectedBatchFilter] = useState<string>('all');
   const [isGeneratingFees, setIsGeneratingFees] = useState(false);
   const [generateMessage, setGenerateMessage] = useState('');
   const [editingFee, setEditingFee] = useState<FeeRecord | null>(null);
@@ -52,6 +53,7 @@ export default function MyFeesPage() {
   const [markPaidFeeId, setMarkPaidFeeId] = useState<string | null>(null);
   const [markPaidMode, setMarkPaidMode] = useState<'cash' | 'online' | 'cash+online'>('cash');
   const [isMarkingPaid, setIsMarkingPaid] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 20;
 
@@ -73,6 +75,16 @@ export default function MyFeesPage() {
     const resolvedBranchIds = branches.map(b => b.id);
     setBranchIds(resolvedBranchIds);
     setCoachBranches(branches);
+
+    // Fetch batch names for this coach's assigned batches (for the filter dropdown)
+    if (!batchInfo.isBranchFallback && batchInfo.batchIds.length > 0) {
+      const { data: batchData } = await (supabase as any)
+        .from('batches')
+        .select('id, name')
+        .in('id', batchInfo.batchIds)
+        .order('name');
+      setCoachBatchList((batchData ?? []) as { id: string; name: string }[]);
+    }
 
     let query = (supabase as any)
       .from('fees')
@@ -179,12 +191,14 @@ export default function MyFeesPage() {
   const canGenerate = selectedMonthStr >= currentSystemMonthStr;
   const isNextDisabled = isAfter(addMonths(currentMonthDate, 1), maxMonth);
 
-  const filteredFees = selectedBranchFilter === 'all'
-    ? fees
-    : fees.filter(fee => fee.players?.branch_id === selectedBranchFilter);
+  const filteredFees = fees.filter(fee => {
+    const matchesSearch = !searchQuery ||
+      (fee.players as any)?.full_name?.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesBranch = selectedBranchFilter === 'all' || (fee.players as any)?.branch_id === selectedBranchFilter;
+    const matchesBatch = selectedBatchFilter === 'all' || (fee.players as any)?.batch_id === selectedBatchFilter;
+    return matchesSearch && matchesBranch && matchesBatch;
+  });
 
-  const paidTotal = filteredFees.filter((fee) => fee.status === 'paid').reduce((sum, fee) => sum + fee.amount, 0);
-  const pendingTotal = filteredFees.filter((fee) => fee.status !== 'paid').reduce((sum, fee) => sum + fee.amount, 0);
   const paidCount = filteredFees.filter((fee) => fee.status === 'paid').length;
   const pendingCount = filteredFees.filter((fee) => fee.status !== 'paid').length;
 
@@ -218,11 +232,10 @@ export default function MyFeesPage() {
       {/* Message */}
       {generateMessage && (
         <div
-          className={`rounded-xl p-4 text-sm font-medium border ${
-            generateMessage.startsWith('Error')
-              ? 'bg-red-500/10 border-red-500/20 text-red-400'
-              : 'bg-green-500/10 border-green-500/20 text-green-400'
-          }`}
+          className={`rounded-xl p-4 text-sm font-medium border ${generateMessage.startsWith('Error')
+            ? 'bg-red-500/10 border-red-500/20 text-red-400'
+            : 'bg-green-500/10 border-green-500/20 text-green-400'
+            }`}
         >
           {generateMessage}
         </div>
@@ -251,45 +264,67 @@ export default function MyFeesPage() {
         </div>
       </div>
 
-      {/* Branch Filter */}
-      {coachBranches.length > 1 && (
-        <div className="rounded-2xl bg-white/[0.03] border border-white/10 p-4">
+      {/* Search + Batch + Branch Filters */}
+      <div className="flex flex-col sm:flex-row gap-3">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+          <input
+            type="text"
+            placeholder="Search by player name..."
+            value={searchQuery}
+            onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
+            className="w-full pl-9 pr-4 py-2.5 bg-white/[0.05] border border-white/10 rounded-xl text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-green-500/50"
+          />
+        </div>
+        {coachBatchList.length > 1 && (
+          <select
+            value={selectedBatchFilter}
+            onChange={(e) => { setSelectedBatchFilter(e.target.value); setCurrentPage(1); }}
+            className="px-4 py-2.5 bg-white/[0.05] border border-white/10 rounded-xl text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500/50 appearance-none cursor-pointer"
+          >
+            <option value="all" className="bg-slate-900">All Batches</option>
+            {coachBatchList.map(b => (
+              <option key={b.id} value={b.id} className="bg-slate-900">{b.name}</option>
+            ))}
+          </select>
+        )}
+        {coachBranches.length > 1 && (
           <select
             value={selectedBranchFilter}
             onChange={(e) => { setSelectedBranchFilter(e.target.value); setCurrentPage(1); }}
-            className="w-full px-4 py-2.5 bg-white/[0.05] border border-white/10 rounded-xl text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500/50 appearance-none cursor-pointer"
+            className="px-4 py-2.5 bg-white/[0.05] border border-white/10 rounded-xl text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500/50 appearance-none cursor-pointer"
           >
             <option value="all" className="bg-slate-900">All Branches</option>
             {coachBranches.map(b => (
               <option key={b.id} value={b.id} className="bg-slate-900">{b.name}</option>
             ))}
           </select>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
         <div className="rounded-2xl bg-white/[0.03] border border-white/10 p-4">
           <div className="flex items-center gap-3">
             <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-green-500/10 border border-green-500/20 shrink-0">
-              <IndianRupee className="w-5 h-5 text-green-400" />
+              <Users className="w-5 h-5 text-green-400" />
             </div>
             <div>
-              <p className="text-[10px] sm:text-xs text-gray-500 font-medium uppercase tracking-wider">Collected</p>
-              <p className="text-lg sm:text-xl font-bold text-white">₹{paidTotal.toLocaleString('en-IN')}</p>
-              <p className="text-[10px] text-gray-500">{paidCount} paid</p>
+              <p className="text-[10px] sm:text-xs text-gray-500 font-medium uppercase tracking-wider">Paid</p>
+              <p className="text-lg sm:text-xl font-bold text-white">{paidCount}</p>
+              <p className="text-[10px] text-gray-500">players</p>
             </div>
           </div>
         </div>
         <div className="rounded-2xl bg-white/[0.03] border border-white/10 p-4">
           <div className="flex items-center gap-3">
             <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 shrink-0">
-              <IndianRupee className="w-5 h-5 text-amber-400" />
+              <Users className="w-5 h-5 text-amber-400" />
             </div>
             <div>
-              <p className="text-[10px] sm:text-xs text-gray-500 font-medium uppercase tracking-wider">Pending</p>
-              <p className="text-lg sm:text-xl font-bold text-white">₹{pendingTotal.toLocaleString('en-IN')}</p>
-              <p className="text-[10px] text-gray-500">{pendingCount} unpaid</p>
+              <p className="text-[10px] sm:text-xs text-gray-500 font-medium uppercase tracking-wider">Unpaid</p>
+              <p className="text-lg sm:text-xl font-bold text-white">{pendingCount}</p>
+              <p className="text-[10px] text-gray-500">players</p>
             </div>
           </div>
         </div>
@@ -309,8 +344,14 @@ export default function MyFeesPage() {
         </div>
       </div>
 
-      {/* Fee Reminders */}
-      {profile && <FeeReminders userId={profile.id} />}
+
+      {/* No results from search */}
+      {!isLoading && fees.length > 0 && filteredFees.length === 0 && (
+        <div className="rounded-2xl bg-white/[0.03] border border-white/10 p-12 text-center">
+          <Search className="w-10 h-10 text-gray-500 mx-auto mb-3" />
+          <p className="text-gray-300 font-medium">No players match &ldquo;{searchQuery}&rdquo;</p>
+        </div>
+      )}
 
       {/* Fee Table */}
       <div className="rounded-2xl bg-white/[0.03] border border-white/10 overflow-hidden">
@@ -377,11 +418,10 @@ export default function MyFeesPage() {
               <button
                 key={mode}
                 onClick={() => setMarkPaidMode(mode)}
-                className={`px-3 py-2.5 rounded-lg text-sm font-medium capitalize transition-colors border ${
-                  markPaidMode === mode
-                    ? 'bg-green-600 border-green-600 text-white'
-                    : 'bg-white/5 border-white/10 text-gray-300 hover:bg-white/10'
-                }`}
+                className={`px-3 py-2.5 rounded-lg text-sm font-medium capitalize transition-colors border ${markPaidMode === mode
+                  ? 'bg-green-600 border-green-600 text-white'
+                  : 'bg-white/5 border-white/10 text-gray-300 hover:bg-white/10'
+                  }`}
               >
                 {mode === 'cash+online' ? 'Cash + Online' : mode}
               </button>
