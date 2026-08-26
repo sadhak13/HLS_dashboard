@@ -9,7 +9,7 @@ import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { Pagination } from '@/components/ui/Pagination';
 import { useToast } from '@/components/ui/Toast';
-import { IndianRupee, Plus, TrendingUp, Clock, AlertCircle, Zap, ChevronLeft, ChevronRight, FileSpreadsheet } from 'lucide-react';
+import { IndianRupee, Plus, TrendingUp, Clock, AlertCircle, Zap, ChevronLeft, ChevronRight, FileSpreadsheet, Users, UserX } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { generateNextMonthFeesForAllBranches } from '@/app/(admin)/fees/actions';
 import { format, addMonths, subMonths, isAfter, startOfMonth } from 'date-fns';
@@ -57,7 +57,7 @@ export default function FeesPage() {
   const ITEMS_PER_PAGE = 20;
 
   // Stats are fetched separately to avoid coupling with pagination
-  const [stats, setStats] = useState({ collected: 0, pending: 0, overdue: 0 });
+  const [stats, setStats] = useState({ collected: 0, pending: 0, overdue: 0, paidCount: 0, unpaidCount: 0 });
   const [isExporting, setIsExporting] = useState(false);
 
   const supabase = createClient();
@@ -79,8 +79,8 @@ export default function FeesPage() {
     const to = from + ITEMS_PER_PAGE - 1;
 
     const selectStr = batch !== 'all'
-      ? '*, players!inner (full_name, branch_id, batch_id), branches (name)'
-      : '*, players (full_name, branch_id, batch_id), branches (name)';
+      ? '*, players!inner (full_name, branch_id, batch_id, status), branches (name)'
+      : '*, players (full_name, branch_id, batch_id, status), branches (name)';
 
     let query = supabase
       .from('fees')
@@ -114,8 +114,8 @@ export default function FeesPage() {
 
   const fetchStats = useCallback(async (branch: string, batch: string) => {
     const selectStr = batch !== 'all'
-      ? 'status, amount, players!inner (batch_id)'
-      : 'status, amount';
+      ? 'player_id, status, amount, players!inner (batch_id)'
+      : 'player_id, status, amount';
 
     let query = supabase
       .from('fees')
@@ -130,13 +130,15 @@ export default function FeesPage() {
       query = query.eq('players.batch_id', batch);
     }
 
-    const { data } = await query as { data: { status: string; amount: number }[] | null };
+    const { data } = await query as { data: { player_id: string; status: string; amount: number }[] | null };
 
     if (data) {
       const collected = data.filter(f => f.status === 'paid').reduce((s, f) => s + f.amount, 0);
       const pending = data.filter(f => f.status === 'pending').reduce((s, f) => s + f.amount, 0);
       const overdue = data.filter(f => f.status === 'overdue').reduce((s, f) => s + f.amount, 0);
-      setStats({ collected, pending, overdue });
+      const paidCount = new Set(data.filter(f => f.status === 'paid').map(f => f.player_id).filter(Boolean)).size;
+      const unpaidCount = new Set(data.filter(f => f.status === 'pending' || f.status === 'overdue').map(f => f.player_id).filter(Boolean)).size;
+      setStats({ collected, pending, overdue, paidCount, unpaidCount });
     }
   }, [selectedMonthStr]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -234,7 +236,7 @@ export default function FeesPage() {
     try {
       let query = (supabase as any)
         .from('fees')
-        .select('amount, status, mode_of_payment, paid_date, players (full_name, parent_phone, date_of_birth, batch_id, batches (name)), branches (name)')
+        .select('amount, status, mode_of_payment, paid_date, players (full_name, parent_phone, date_of_birth, batch_id, status, batches (name)), branches (name)')
         .eq('month', selectedMonthStr)
         .order('created_at', { ascending: true });
 
@@ -408,18 +410,17 @@ export default function FeesPage() {
 
       {generateMessage && (
         <div
-          className={`p-4 rounded-lg text-sm font-medium ${
-            generateMessage.startsWith('Error')
-              ? 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400'
-              : 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400'
-          }`}
+          className={`p-4 rounded-lg text-sm font-medium ${generateMessage.startsWith('Error')
+            ? 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400'
+            : 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400'
+            }`}
         >
           {generateMessage}
         </div>
       )}
 
       {/* Summary cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-4">
         <StatCard
           label="Total Collected"
           value={`₹${stats.collected.toLocaleString('en-IN')}`}
@@ -438,6 +439,18 @@ export default function FeesPage() {
           icon={<AlertCircle className="w-5 h-5 text-red-600" />}
           color="bg-red-100 dark:bg-red-900/30"
         />
+        <StatCard
+          label="Paid Players"
+          value={String(stats.paidCount)}
+          icon={<Users className="w-5 h-5 text-green-600" />}
+          color="bg-green-100 dark:bg-green-900/30"
+        />
+        <StatCard
+          label="Unpaid Players"
+          value={String(stats.unpaidCount)}
+          icon={<UserX className="w-5 h-5 text-red-600" />}
+          color="bg-red-100 dark:bg-red-900/30"
+        />
       </div>
 
       {/* Filter tabs */}
@@ -447,11 +460,10 @@ export default function FeesPage() {
             <button
               key={s}
               onClick={() => handleFilterChange(s)}
-              className={`px-4 py-1.5 rounded-full text-sm font-medium capitalize transition-colors ${
-                filterStatus === s
-                  ? 'bg-green-600 text-white'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
-              }`}
+              className={`px-4 py-1.5 rounded-full text-sm font-medium capitalize transition-colors ${filterStatus === s
+                ? 'bg-green-600 text-white'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
+                }`}
             >
               {s}
             </button>
@@ -534,11 +546,10 @@ export default function FeesPage() {
               <button
                 key={mode}
                 onClick={() => setMarkPaidMode(mode)}
-                className={`px-3 py-2.5 rounded-lg text-sm font-medium capitalize transition-colors border ${
-                  markPaidMode === mode
-                    ? 'bg-green-600 border-green-600 text-white'
-                    : 'bg-white/5 border-white/10 text-gray-300 hover:bg-white/10'
-                }`}
+                className={`px-3 py-2.5 rounded-lg text-sm font-medium capitalize transition-colors border ${markPaidMode === mode
+                  ? 'bg-green-600 border-green-600 text-white'
+                  : 'bg-white/5 border-white/10 text-gray-300 hover:bg-white/10'
+                  }`}
               >
                 {mode === 'cash+online' ? 'Cash + Online' : mode}
               </button>

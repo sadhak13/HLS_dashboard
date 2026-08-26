@@ -13,7 +13,7 @@ interface FeeRecord {
   status: 'paid' | 'pending' | 'overdue';
   mode_of_payment: 'cash' | 'online' | 'cash+online' | null;
   paid_date: string | null;
-  players: { full_name: string; branch_id: string } | null;
+  players: { full_name: string; branch_id: string; status?: string } | null;
   branches: { name: string } | null;
 }
 
@@ -68,8 +68,13 @@ export const FeeTable = React.memo(function FeeTable({ fees, isLoading, onMarkPa
           return (
             <div key={fee.id} className="p-4 space-y-3">
               <div className="flex items-center justify-between">
-                <span className="font-medium text-gray-900 dark:text-white">
+                <span className="font-medium text-gray-900 dark:text-white flex items-center gap-2">
                   {fee.players?.full_name ?? 'Unknown'}
+                  {fee.players?.status && fee.players.status !== 'active' && (
+                    <Badge variant={fee.players.status === 'dropped' ? 'danger' : 'default'} className="scale-90">
+                      {fee.players.status === 'dropped' ? 'Dropped' : 'Inactive'}
+                    </Badge>
+                  )}
                 </span>
                 <Badge variant={cfg.variant}>{cfg.label}</Badge>
               </div>
@@ -141,8 +146,13 @@ export const FeeTable = React.memo(function FeeTable({ fees, isLoading, onMarkPa
               return (
                 <TableRow key={fee.id}>
                   <TableCell>
-                    <span className="font-medium text-gray-900 dark:text-white">
+                    <span className="font-medium text-gray-900 dark:text-white flex items-center gap-2">
                       {fee.players?.full_name ?? 'Unknown'}
+                      {fee.players?.status && fee.players.status !== 'active' && (
+                        <Badge variant={fee.players.status === 'dropped' ? 'danger' : 'default'} className="scale-90">
+                          {fee.players.status === 'dropped' ? 'Dropped' : 'Inactive'}
+                        </Badge>
+                      )}
                     </span>
                   </TableCell>
                   <TableCell className="text-sm text-gray-600 dark:text-gray-400">
