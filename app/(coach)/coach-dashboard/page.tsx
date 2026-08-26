@@ -13,7 +13,7 @@ import { clientCache } from '@/lib/clientCache';
 interface CoachDashboardStats {
   branchName: string;
   activePlayers: number;
-  pendingAmount: number;
+  unpaidPlayersCount: number;
   presentCount: number;
   absentCount: number;
 }
@@ -21,7 +21,7 @@ interface CoachDashboardStats {
 export default function CoachDashboardPage() {
   const { profile } = useAuth();
   const supabase = createClient();
-  
+
   // Cache key unique to this user and date
   const cacheKey = profile ? `coach_dashboard_stats_${profile.id}` : '';
 
@@ -33,7 +33,7 @@ export default function CoachDashboardPage() {
     return {
       branchName: 'Your branch',
       activePlayers: 0,
-      pendingAmount: 0,
+      unpaidPlayersCount: 0,
       presentCount: 0,
       absentCount: 0,
     };
@@ -50,7 +50,7 @@ export default function CoachDashboardPage() {
   const fetchSummary = useCallback(async () => {
     if (!profile) return;
     // Only show the spinner on the very first load — subsequent refreshes happen silently
-    if (stats.activePlayers === 0 && stats.pendingAmount === 0) setIsLoading(true);
+    if (stats.activePlayers === 0 && stats.unpaidPlayersCount === 0) setIsLoading(true);
 
     const [branches, batchInfo] = await Promise.all([
       getCoachBranches(profile.id),
@@ -80,7 +80,7 @@ export default function CoachDashboardPage() {
       playersQuery,
       (supabase as any)
         .from('fees')
-        .select('amount, status, players(batch_id)')
+        .select('player_id, status, players(batch_id)')
         .in('branch_id', branchIds)
         .in('status', ['pending', 'overdue']),
       (supabase as any)
@@ -102,14 +102,14 @@ export default function CoachDashboardPage() {
       ? (attendanceData ?? []).filter((row: any) => row.batch_id && batchSet.has(row.batch_id))
       : (attendanceData ?? []);
 
-    const pendingAmount = scopedFees.reduce((sum: number, fee: any) => sum + Number(fee.amount || 0), 0);
+    const unpaidPlayersCount = new Set(scopedFees.map((fee: any) => fee.player_id).filter(Boolean)).size;
     const presentCount = scopedAttendance.filter((row: any) => row.status === 'present').length;
     const absentCount = scopedAttendance.filter((row: any) => row.status === 'absent').length;
 
     const newStats = {
       branchName: branchNames,
       activePlayers: playersData?.length || 0,
-      pendingAmount,
+      unpaidPlayersCount,
       presentCount,
       absentCount,
     };
@@ -152,8 +152,8 @@ export default function CoachDashboardPage() {
               iconColor="text-green-500"
             />
             <StatCard
-              title="Pending Fees"
-              value={`₹${stats.pendingAmount.toLocaleString('en-IN')}`}
+              title="Unpaid Players"
+              value={stats.unpaidPlayersCount}
               icon={IndianRupee}
               iconColor="text-amber-500"
             />
