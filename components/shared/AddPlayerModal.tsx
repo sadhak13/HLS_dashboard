@@ -9,6 +9,7 @@ import { createAdminPlayer, updateAdminPlayer } from '@/app/(admin)/players/acti
 import { createCoachPlayer, updateCoachPlayer } from '@/app/(coach)/my-players/actions'
 import { useAuth } from '@/context/AuthContext'
 import { getCoachBranches, type CoachBranch } from '@/lib/coach'
+import { toTitleCase } from '@/lib/utils'
 
 interface EditingPlayer {
   id: string
@@ -160,24 +161,27 @@ export function AddPlayerModal({ isOpen, onClose, onSuccess, editingPlayer }: Ad
     e.preventDefault()
     setError('')
 
+    const formattedFullName = toTitleCase(fullName.trim())
+    const formattedParentName = toTitleCase(parentName.trim())
+
     const nameRegex = /^[a-zA-Z\s.]+$/
-    if (!fullName.trim()) {
+    if (!formattedFullName) {
       setError('Full name is required')
       return
     }
-    if (fullName.trim().split(/\s+/).length < 2) {
+    if (formattedFullName.split(/\s+/).length < 2) {
       setError('Please enter full name (first and last name)')
       return
     }
-    if (!nameRegex.test(fullName.trim())) {
+    if (!nameRegex.test(formattedFullName)) {
       setError('Full name should only contain letters and spaces')
       return
     }
-    if (!parentName.trim()) {
+    if (!formattedParentName) {
       setError('Parent / Guardian name is required')
       return
     }
-    if (parentName.trim().length < 3) {
+    if (formattedParentName.length < 3) {
       setError('Please enter a valid parent / guardian name')
       return
     }
@@ -202,10 +206,10 @@ export function AddPlayerModal({ isOpen, onClose, onSuccess, editingPlayer }: Ad
     setIsLoading(true)
 
     const formData = new FormData()
-    formData.append('fullName', fullName)
+    formData.append('fullName', formattedFullName)
     formData.append('dob', dob)
     formData.append('gender', gender)
-    formData.append('parentName', parentName)
+    formData.append('parentName', formattedParentName)
     formData.append('parentPhone', parentPhone)
     formData.append('branchId', branchId)
     formData.append('batchId', batchId)
