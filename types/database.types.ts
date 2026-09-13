@@ -85,6 +85,7 @@ export interface Database {
           branch_id: string
           phone: string | null
           created_at: string
+          status: 'active' | 'inactive'
         }
         Insert: {
           id?: string
@@ -92,6 +93,7 @@ export interface Database {
           branch_id: string
           phone?: string | null
           created_at?: string
+          status?: 'active' | 'inactive'
         }
         Update: {
           id?: string
@@ -99,6 +101,7 @@ export interface Database {
           branch_id?: string
           phone?: string | null
           created_at?: string
+          status?: 'active' | 'inactive'
         }
       }
       coach_batches: {
@@ -133,6 +136,8 @@ export interface Database {
           enrolled_date: string
           status: 'active' | 'inactive' | 'dropped'
           created_at: string
+          gender: 'male' | 'female' | 'other' | null
+          aadhar_number: string | null
         }
         Insert: {
           id?: string
@@ -145,6 +150,8 @@ export interface Database {
           enrolled_date?: string
           status?: 'active' | 'inactive' | 'dropped'
           created_at?: string
+          gender?: 'male' | 'female' | 'other' | null
+          aadhar_number?: string | null
         }
         Update: {
           id?: string
@@ -157,6 +164,8 @@ export interface Database {
           enrolled_date?: string
           status?: 'active' | 'inactive' | 'dropped'
           created_at?: string
+          gender?: 'male' | 'female' | 'other' | null
+          aadhar_number?: string | null
         }
       }
       attendance: {

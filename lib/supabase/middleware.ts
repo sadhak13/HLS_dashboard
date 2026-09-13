@@ -2,8 +2,8 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
 const PUBLIC_ROUTES = ['/login']
-const ADMIN_ROUTES = ['/dashboard', '/branches', '/coaches', '/players', '/fees']
-const COACH_ROUTES = ['/coach-dashboard', '/coach-attendance', '/coach-fees']
+const ADMIN_ROUTES = ['/dashboard', '/branches', '/coaches', '/players', '/fees', '/attendance']
+const COACH_ROUTES = ['/coach-dashboard', '/my-players', '/my-attendance', '/my-fees']
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request })
