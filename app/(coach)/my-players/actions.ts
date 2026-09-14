@@ -189,6 +189,28 @@ export async function deleteCoachPlayer(playerId: string) {
 }
 
 /**
+ * Pause or resume a player — toggles between active and inactive.
+ * Does not touch dropped players; use deleteCoachPlayer/permanentDeleteAdminPlayer for that.
+ */
+export async function setCoachPlayerStatus(playerId: string, status: 'active' | 'inactive') {
+  const supabase = createAdminClient()
+
+  try {
+    const { error } = await (supabase as any)
+      .from('players')
+      .update({ status })
+      .eq('id', playerId)
+
+    if (error) throw error
+
+    revalidatePath('/my-players')
+    return { success: true }
+  } catch (err: any) {
+    return { error: err.message || 'Failed to update player status' }
+  }
+}
+
+/**
  * Creates initial fee for a newly added player
  * Auto-populated with defaults
  */

@@ -9,6 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - If a prompt is ambiguous or missing details needed to implement it correctly, ask clarifying questions before writing code — don't guess and proceed on an assumption.
 - Once all the needed answers are in, before finalizing, sanity-check the planned implementation against industry standards (per the Code Quality Bar below) rather than just making it work.
 - Along with the implementation, proactively surface ideas for improving the product where relevant (better UX, edge cases not asked about, technical debt worth flagging) — as suggestions, not unrequested extra work.
+- When explaining anything after code changes or in discussions (not the code itself, the conversation with the user), use simple, plain words — avoid unnecessary jargon — and back explanations with a concrete example where it helps (e.g. a short "Ravi joins → active, gets injured → inactive, leaves for good → dropped"-style walkthrough rather than just naming the states abstractly).
 
 ## Code Quality Bar
 

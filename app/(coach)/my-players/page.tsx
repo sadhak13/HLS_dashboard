@@ -3,13 +3,14 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import { useAuth } from '@/context/AuthContext'
 import { createClient } from '@/lib/supabase/client'
-import { Users, Phone, Plus, Trash2, Search, UserCircle, Pencil } from 'lucide-react'
+import { Users, Phone, Plus, Trash2, Search, UserCircle, Pencil, UserX, UserCheck } from 'lucide-react'
 import { AddPlayerModal } from '@/components/shared/AddPlayerModal'
 import { AddFeesForNewPlayerModal } from '@/components/coach/AddFeesForNewPlayerModal'
 import { DeletePlayerModal } from '@/components/coach/DeletePlayerModal'
 import { Pagination } from '@/components/ui/Pagination'
 import { getCoachBranches, getCoachBatchInfo, type CoachBranch } from '@/lib/coach'
 import { clientCache } from '@/lib/clientCache'
+import { setCoachPlayerStatus } from './actions'
 
 interface PlayerRecord {
   id: string
@@ -65,6 +66,7 @@ export default function MyPlayersPage() {
   const [playerToDelete, setPlayerToDelete] = useState<PlayerRecord | null>(null)
   const [playerToEdit, setPlayerToEdit] = useState<PlayerRecord | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
+  const [updatingStatusId, setUpdatingStatusId] = useState<string | null>(null)
   const ITEMS_PER_PAGE = 15
 
   const fetchPlayers = useCallback(async () => {
@@ -133,6 +135,14 @@ export default function MyPlayersPage() {
   const handleEditClick = (player: PlayerRecord) => {
     setPlayerToEdit(player)
     setShowAddPlayerModal(true)
+  }
+
+  const handleToggleActive = async (player: PlayerRecord) => {
+    const nextStatus = player.status === 'active' ? 'inactive' : 'active'
+    setUpdatingStatusId(player.id)
+    await setCoachPlayerStatus(player.id, nextStatus)
+    setUpdatingStatusId(null)
+    fetchPlayers()
   }
 
   const handleDeleteClick = (player: PlayerRecord) => {
@@ -332,6 +342,16 @@ export default function MyPlayersPage() {
                   >
                     <Pencil className="h-4 w-4" />
                   </button>
+                  {player.status !== 'dropped' && (
+                    <button
+                      onClick={() => handleToggleActive(player)}
+                      disabled={updatingStatusId === player.id}
+                      className="p-2 rounded-lg text-gray-500 hover:text-amber-400 hover:bg-amber-500/10 transition-all disabled:opacity-50"
+                      title={player.status === 'active' ? 'Mark inactive' : 'Mark active'}
+                    >
+                      {player.status === 'active' ? <UserX className="h-4 w-4" /> : <UserCheck className="h-4 w-4" />}
+                    </button>
+                  )}
                   <button
                     onClick={() => handleDeleteClick(player)}
                     className="p-2 rounded-lg text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-all"
