@@ -63,8 +63,8 @@ export default function MyFeesPage() {
     if (fees.length === 0) setIsLoading(true);
 
     const [branches, batchInfo] = await Promise.all([
-      getCoachBranches(profile.id),
-      getCoachBatchInfo(profile.id),
+      getCoachBranches(profile.id, profile.role),
+      getCoachBatchInfo(profile.id, profile.role),
     ]);
 
     if (branches.length === 0) {

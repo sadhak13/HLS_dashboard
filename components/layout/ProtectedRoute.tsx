@@ -3,8 +3,9 @@
 import React, { useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
+import { ROLE_HOME_ROUTE, type Role } from '@/constants/roles';
 
-export function ProtectedRoute({ children, allowedRole }: { children: React.ReactNode, allowedRole: 'ADMIN' | 'COACH' }) {
+export function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode, allowedRoles: Role[] }) {
   const { user, profile, isLoading } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
@@ -17,16 +18,15 @@ export function ProtectedRoute({ children, allowedRole }: { children: React.Reac
       return;
     }
 
-    if (profile && profile.role !== allowedRole) {
-      if (profile.role === 'ADMIN') router.push('/dashboard');
-      if (profile.role === 'COACH') router.push('/coach-dashboard');
+    if (profile && !allowedRoles.includes(profile.role)) {
+      router.push(ROLE_HOME_ROUTE[profile.role]);
       return;
     }
 
-    if (allowedRole === 'COACH' && user?.user_metadata?.must_change_password && pathname !== '/change-password') {
+    if (user?.user_metadata?.must_change_password && pathname !== '/change-password') {
       router.push('/change-password');
     }
-  }, [user, profile, isLoading, allowedRole, router, pathname]);
+  }, [user, profile, isLoading, allowedRoles, router, pathname]);
 
   // Show spinner while loading or waiting for profile
   if (isLoading || !user) {
@@ -41,7 +41,7 @@ export function ProtectedRoute({ children, allowedRole }: { children: React.Reac
   }
 
   // Role mismatch — render nothing while redirect is processing
-  if (profile?.role !== allowedRole) {
+  if (!profile || !allowedRoles.includes(profile.role)) {
     return null;
   }
 

@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/client'
+import { ROLES, type Role } from '@/constants/roles'
 
 export interface CoachBranch {
   id: string
@@ -8,16 +9,29 @@ export interface CoachBranch {
 export interface CoachBatchInfo {
   batchIds: string[]
   branchIds: string[]
-  /** true when the coach has no batch assignments and falls back to branch-level access */
+  /** true when there are no specific batch assignments and access falls back to branch-level */
   isBranchFallback: boolean
 }
 
 /**
- * Returns the branches the coach is assigned to (via their batch assignments).
+ * Returns the branches the given staff member (coach or manager) is assigned to.
+ * A coach's branches come from their batch assignments (or their home branch,
+ * if unassigned); a manager's is always just their single home branch.
  * This is used for branch-level UI filters — not for data scoping.
  */
-export async function getCoachBranches(userId: string): Promise<CoachBranch[]> {
+export async function getCoachBranches(userId: string, role: Role = ROLES.COACH): Promise<CoachBranch[]> {
   const supabase = createClient()
+
+  if (role === ROLES.MANAGER) {
+    const { data: managerData } = await (supabase as any)
+      .from('managers')
+      .select('branch_id, branches (id, name)')
+      .eq('user_id', userId)
+      .maybeSingle()
+
+    if (!managerData?.branches) return []
+    return [{ id: managerData.branches.id, name: managerData.branches.name }]
+  }
 
   const { data: coachData } = await (supabase as any)
     .from('coaches')
@@ -65,18 +79,35 @@ export function clearCoachBatchInfoCache(userId?: string) {
 }
 
 /**
- * Returns the coach's own batch IDs and branch IDs.
+ * Returns the staff member's own batch IDs and branch IDs, used to scope
+ * player/fee/attendance queries.
  * Results are cached in memory for the duration of the browser session.
- * Use this to scope player/fee/attendance queries to the coach's specific batches.
- * Falls back to branch-level IDs only if the coach has no batch assignments.
+ * A coach falls back to branch-level IDs only if they have no batch
+ * assignments; a manager is always branch-level (isBranchFallback: true),
+ * since managers oversee an entire branch rather than specific batches.
  */
-export async function getCoachBatchInfo(userId: string): Promise<CoachBatchInfo> {
+export async function getCoachBatchInfo(userId: string, role: Role = ROLES.COACH): Promise<CoachBatchInfo> {
   // Return cached result if available (avoids DB hit on every page revisit)
   if (batchInfoCache.has(userId)) {
     return batchInfoCache.get(userId)!
   }
 
   const supabase = createClient()
+
+  if (role === ROLES.MANAGER) {
+    const { data: managerData } = await (supabase as any)
+      .from('managers')
+      .select('branch_id')
+      .eq('user_id', userId)
+      .maybeSingle()
+
+    const result: CoachBatchInfo = managerData?.branch_id
+      ? { batchIds: [], branchIds: [managerData.branch_id], isBranchFallback: true }
+      : { batchIds: [], branchIds: [], isBranchFallback: false }
+
+    batchInfoCache.set(userId, result)
+    return result
+  }
 
   const { data: coachData } = await (supabase as any)
     .from('coaches')

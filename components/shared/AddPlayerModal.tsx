@@ -77,8 +77,24 @@ export function AddPlayerModal({ isOpen, onClose, onSuccess, editingPlayer }: Ad
               .select('id, branch_id, name, start_time, end_time')
               .order('start_time')
             if (batchData) setBatches(batchData)
+          } else if (profile.role === 'MANAGER') {
+            const managerBranches = await getCoachBranches(profile.id, profile.role)
+            if (managerBranches.length === 1) {
+              setBranchId(managerBranches[0].id)
+
+              // Managers oversee every batch in their branch, not specific assignments
+              const { data: branchBatchData } = await (supabase as any)
+                .from('batches')
+                .select('id, branch_id, name, start_time, end_time')
+                .eq('branch_id', managerBranches[0].id)
+                .order('start_time')
+
+              if (branchBatchData) setBatches(branchBatchData)
+            } else {
+              setError('You are not assigned to any branch. Please contact an admin.')
+            }
           } else {
-            const coachBranches = await getCoachBranches(profile.id)
+            const coachBranches = await getCoachBranches(profile.id, profile.role)
             if (coachBranches.length > 1) {
               setBranches(coachBranches)
             } else if (coachBranches.length === 1) {

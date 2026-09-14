@@ -5,6 +5,8 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { LayoutDashboard, CheckSquare, Users, IndianRupee } from 'lucide-react';
+import { useAuth } from '@/context/AuthContext';
+import { ROLE_LABELS, ROLES } from '@/constants/roles';
 
 const navItems = [
   { name: 'Dashboard', href: '/coach-dashboard', icon: LayoutDashboard },
@@ -15,6 +17,8 @@ const navItems = [
 
 export function CoachSidebar({ isOpen, setIsOpen }: { isOpen: boolean; setIsOpen: (val: boolean) => void }) {
   const pathname = usePathname();
+  const { profile } = useAuth();
+  const roleLabel = ROLE_LABELS[profile?.role ?? ROLES.COACH];
 
   return (
     <>
@@ -41,7 +45,7 @@ export function CoachSidebar({ isOpen, setIsOpen }: { isOpen: boolean; setIsOpen
               height={32}
               className="object-contain"
             />
-            <span className="truncate max-w-[140px]">HLS Coach</span>
+            <span className="truncate max-w-[140px]">HLS {roleLabel}</span>
           </div>
         </div>
 

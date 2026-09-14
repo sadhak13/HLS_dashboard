@@ -4,6 +4,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { Bell, Phone } from 'lucide-react';
 import { getCoachBranches, getCoachBatchInfo } from '@/lib/coach';
+import { ROLES, type Role } from '@/constants/roles';
 
 interface PendingFeePlayer {
   playerName: string;
@@ -20,10 +21,11 @@ function getDueDate(enrolledDate: string): number {
 
 interface FeeRemindersProps {
   userId: string;
+  role?: Role;
   compact?: boolean;
 }
 
-export function FeeReminders({ userId, compact = false }: FeeRemindersProps) {
+export function FeeReminders({ userId, role = ROLES.COACH, compact = false }: FeeRemindersProps) {
   const supabase = createClient();
   const [reminders, setReminders] = useState<PendingFeePlayer[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -32,8 +34,8 @@ export function FeeReminders({ userId, compact = false }: FeeRemindersProps) {
     setIsLoading(true);
 
     const [branches, batchInfo] = await Promise.all([
-      getCoachBranches(userId),
-      getCoachBatchInfo(userId),
+      getCoachBranches(userId, role),
+      getCoachBatchInfo(userId, role),
     ]);
 
     if (branches.length === 0) {
@@ -88,7 +90,7 @@ export function FeeReminders({ userId, compact = false }: FeeRemindersProps) {
     pending.sort((a, b) => a.daysLeft - b.daysLeft);
     setReminders(pending);
     setIsLoading(false);
-  }, [userId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [userId, role]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     fetchReminders();

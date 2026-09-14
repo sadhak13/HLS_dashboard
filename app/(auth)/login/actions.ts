@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { STAFF_ROLES } from '@/constants/roles'
 
 export async function login(prevState: any, formData: FormData) {
   const email = formData.get('email') as string
@@ -34,10 +35,12 @@ export async function login(prevState: any, formData: FormData) {
 
   revalidatePath('/', 'layout')
 
+  const isStaff = !!profile?.role && STAFF_ROLES.includes(profile.role)
+
   let redirectTo = '/dashboard'
-  if (profile?.role === 'COACH' && requiresPasswordChange) {
+  if (isStaff && requiresPasswordChange) {
     redirectTo = '/change-password'
-  } else if (profile?.role === 'COACH') {
+  } else if (isStaff) {
     redirectTo = '/coach-dashboard'
   }
 

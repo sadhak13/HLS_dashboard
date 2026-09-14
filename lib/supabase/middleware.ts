@@ -1,8 +1,9 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import { STAFF_ROLES } from '@/constants/roles'
 
 const PUBLIC_ROUTES = ['/login']
-const ADMIN_ROUTES = ['/dashboard', '/branches', '/coaches', '/players', '/fees', '/attendance']
+const ADMIN_ROUTES = ['/dashboard', '/branches', '/coaches', '/managers', '/players', '/fees', '/attendance']
 const COACH_ROUTES = ['/coach-dashboard', '/my-players', '/my-attendance', '/my-fees']
 
 export async function updateSession(request: NextRequest) {
@@ -57,7 +58,7 @@ export async function updateSession(request: NextRequest) {
       .single()
 
     if (pathname.startsWith('/login')) {
-      if (profile?.role === 'COACH') {
+      if (profile?.role && STAFF_ROLES.includes(profile.role)) {
         return NextResponse.redirect(new URL('/coach-dashboard', request.url))
       }
       return NextResponse.redirect(new URL('/dashboard', request.url))
@@ -66,7 +67,7 @@ export async function updateSession(request: NextRequest) {
     const isAdminRoute = ADMIN_ROUTES.some((r) => pathname.startsWith(r))
     const isCoachRoute = COACH_ROUTES.some((r) => pathname.startsWith(r))
 
-    if (profile?.role === 'COACH' && isAdminRoute) {
+    if (profile?.role && STAFF_ROLES.includes(profile.role) && isAdminRoute) {
       return NextResponse.redirect(new URL('/coach-dashboard', request.url))
     }
 

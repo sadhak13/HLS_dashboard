@@ -61,24 +61,50 @@ export interface Database {
       profiles: {
         Row: {
           id: string
-          role: 'ADMIN' | 'COACH'
+          role: 'ADMIN' | 'COACH' | 'MANAGER'
           full_name: string
           created_at: string
         }
         Insert: {
           id: string
-          role: 'ADMIN' | 'COACH'
+          role: 'ADMIN' | 'COACH' | 'MANAGER'
           full_name: string
           created_at?: string
         }
         Update: {
           id?: string
-          role?: 'ADMIN' | 'COACH'
+          role?: 'ADMIN' | 'COACH' | 'MANAGER'
           full_name?: string
           created_at?: string
         }
       }
       coaches: {
+        Row: {
+          id: string
+          user_id: string
+          branch_id: string
+          phone: string | null
+          created_at: string
+          status: 'active' | 'inactive'
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          branch_id: string
+          phone?: string | null
+          created_at?: string
+          status?: 'active' | 'inactive'
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          branch_id?: string
+          phone?: string | null
+          created_at?: string
+          status?: 'active' | 'inactive'
+        }
+      }
+      managers: {
         Row: {
           id: string
           user_id: string
@@ -248,6 +274,10 @@ export interface Database {
       get_coach_batch_ids: {
         Args: Record<PropertyKey, never>
         Returns: string[]
+      }
+      get_manager_branch_id: {
+        Args: Record<PropertyKey, never>
+        Returns: string
       }
     }
     Enums: {

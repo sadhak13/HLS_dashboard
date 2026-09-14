@@ -2,12 +2,13 @@ import React from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Users, UserSquare, IndianRupee, MapPin, CalendarDays } from 'lucide-react';
+import { LayoutDashboard, Users, UserSquare, UserCog, IndianRupee, MapPin, CalendarDays } from 'lucide-react';
 
 const navItems = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Branches', href: '/branches', icon: MapPin },
   { name: 'Coaches', href: '/coaches', icon: UserSquare },
+  { name: 'Managers', href: '/managers', icon: UserCog },
   { name: 'Players', href: '/players', icon: Users },
   { name: 'Fees', href: '/fees', icon: IndianRupee },
   { name: 'Attendance', href: '/attendance', icon: CalendarDays },

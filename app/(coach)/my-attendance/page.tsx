@@ -202,6 +202,51 @@ export default function CoachAttendancePage() {
     // Only show the spinner on first load — revisiting the page shows previous data instantly
     if (batches.length === 0) setIsLoading(true);
 
+    const applyBatchOptions = (batchOptions: BatchOption[]) => {
+      setBatches(batchOptions);
+      if (cacheKeyBatches) {
+        clientCache.set(cacheKeyBatches, batchOptions);
+      }
+      if (batchOptions.length === 1) {
+        setSelectedBatchId(batchOptions[0].id);
+      } else {
+        setIsLoading(false);
+      }
+    };
+
+    if (profile.role === 'MANAGER') {
+      // Managers oversee every batch in their branch, not specific assignments
+      const { data: managerData } = await (supabase as any)
+        .from('managers')
+        .select('id, branch_id')
+        .eq('user_id', profile.id)
+        .maybeSingle();
+
+      if (!managerData) { setIsLoading(false); return; }
+      setBranchId(managerData.branch_id);
+      setCoachId(managerData.id);
+
+      const { data: branchBatches } = await (supabase as any)
+        .from('batches')
+        .select('id, name, start_time, end_time, branch_id, branches (name)')
+        .eq('branch_id', managerData.branch_id);
+
+      if (branchBatches && branchBatches.length > 0) {
+        applyBatchOptions(branchBatches.map((b: any) => ({
+          id: b.id,
+          name: b.name,
+          start_time: b.start_time,
+          end_time: b.end_time,
+          branch_name: b.branches?.name || '',
+        })));
+      } else {
+        setBatches([]);
+        setSelectedBatchId(null);
+        setIsLoading(false);
+      }
+      return;
+    }
+
     const { data: coachData } = await (supabase as any)
       .from('coaches')
       .select('id, branch_id')
@@ -218,22 +263,13 @@ export default function CoachAttendancePage() {
       .eq('coach_id', coachData.id);
 
     if (coachBatches && coachBatches.length > 0) {
-      const batchOptions: BatchOption[] = coachBatches.map((cb: any) => ({
+      applyBatchOptions(coachBatches.map((cb: any) => ({
         id: cb.batches.id,
         name: cb.batches.name,
         start_time: cb.batches.start_time,
         end_time: cb.batches.end_time,
         branch_name: cb.batches.branches?.name || '',
-      }));
-      setBatches(batchOptions);
-      if (cacheKeyBatches) {
-        clientCache.set(cacheKeyBatches, batchOptions);
-      }
-      if (batchOptions.length === 1) {
-        setSelectedBatchId(batchOptions[0].id);
-      } else {
-        setIsLoading(false);
-      }
+      })));
     } else {
       setBatches([]);
       setSelectedBatchId(null);

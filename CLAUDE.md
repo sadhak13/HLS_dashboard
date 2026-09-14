@@ -86,11 +86,11 @@ This repo pins `next@16.2.9`, which has real breaking changes vs. older Next.js 
 
 ### Route groups = role boundaries
 
-`app/` uses three route groups, each mapping directly to an access level:
+There are three roles (`ADMIN`, `COACH`, `MANAGER` — see `constants/roles.ts`) but only two route groups, since Manager reuses the Coach tree entirely:
 
 - `app/(auth)/` — `/login`, `/change-password`. Public.
-- `app/(admin)/` — `/dashboard`, `/players`, `/coaches`, `/branches`, `/attendance`, `/fees`. Wrapped by `app/(admin)/layout.tsx`, which renders `<ProtectedRoute allowedRole="ADMIN">`.
-- `app/(coach)/` — `/coach-dashboard`, `/my-players`, `/my-attendance`, `/my-fees`. Wrapped by `app/(coach)/layout.tsx` with `<ProtectedRoute allowedRole="COACH">`.
+- `app/(admin)/` — `/dashboard`, `/players`, `/coaches`, `/managers`, `/branches`, `/attendance`, `/fees`. Wrapped by `app/(admin)/layout.tsx`, which renders `<ProtectedRoute allowedRoles={['ADMIN']}>`.
+- `app/(coach)/` — `/coach-dashboard`, `/my-players`, `/my-attendance`, `/my-fees`. Wrapped by `app/(coach)/layout.tsx` with `<ProtectedRoute allowedRoles={STAFF_ROLES}>` (`STAFF_ROLES = ['COACH', 'MANAGER']`). A Manager gets the exact same pages as a Coach — the only difference is data scope (whole branch vs. assigned batches), isolated inside `lib/coach.ts`.
 
 Each protected route directory typically has `page.tsx` (mostly client-driven), `loading.tsx`, and an `actions.ts` with the `'use server'` mutations for that section (e.g. `app/(admin)/players/actions.ts`, `app/(admin)/coaches/actions.ts`, `app/(admin)/fees/actions.ts`).
 
@@ -99,7 +99,7 @@ Each protected route directory typically has `page.tsx` (mostly client-driven), 
 1. **`proxy.ts` → `lib/supabase/middleware.ts` (`updateSession`)**: runs on every request, refreshes the Supabase session cookie, and does coarse redirect-level routing (`PUBLIC_ROUTES` / `ADMIN_ROUTES` / `COACH_ROUTES` arrays) based on the `profiles.role` fetched fresh each request. This is the first line of defense and prevents an unauthenticated or wrong-role user from ever getting HTML for a page they shouldn't see.
 2. **`components/layout/ProtectedRoute.tsx` + `context/AuthContext.tsx`**: a client-side belt-and-suspenders check. `AuthContext` subscribes to `supabase.auth.onAuthStateChange` and loads the `profiles` row into `profile`. `ProtectedRoute` redirects on role mismatch and also enforces the forced `must_change_password` flow for coaches (see below).
 
-When touching auth/routing, keep both in sync — `middleware.ts`'s route arrays and `ProtectedRoute`'s `allowedRole` prop are two independent sources of truth for the same boundary.
+When touching auth/routing, keep both in sync — `middleware.ts`'s route arrays and `ProtectedRoute`'s `allowedRoles` prop are two independent sources of truth for the same boundary. Role→behavior mappings (home route, display label, which roles share the staff route group) are centralized in `constants/roles.ts` (`ROLE_HOME_ROUTE`, `ROLE_LABELS`, `STAFF_ROLES`) specifically so a future 4th role is a one-file change, not a hunt through every hardcoded `role === 'X'` check.
 
 ### Three Supabase client variants — pick the right one
 
@@ -109,9 +109,13 @@ When touching auth/routing, keep both in sync — `middleware.ts`'s route arrays
 
 Row Level Security is enforced at the Postgres level using SQL functions declared in `types/database.types.ts`'s `Functions` (`is_admin`, `get_coach_branch_id`, `get_coach_batch_ids`) — these are referenced by DB policies, not called from TypeScript. Data-scoping logic that *is* in TypeScript (for building UI queries) lives in `lib/coach.ts` (see below).
 
-### Coach data scoping (`lib/coach.ts`)
+### Staff data scoping (`lib/coach.ts`)
 
-Coaches are scoped by **batch** first, falling back to **branch** only if they have no batch assignments (`isBranchFallback`). `getCoachBatchInfo(userId)` returns `{ batchIds, branchIds, isBranchFallback }` and is the function coach-side pages/queries use to filter players/attendance/fees. Results are memoized in an in-memory `Map` for the session (`clearCoachBatchInfoCache` busts it) — batch/branch assignments rarely change mid-session, so don't add another cache layer on top.
+`getCoachBatchInfo(userId, role)` and `getCoachBranches(userId, role)` are the single source of truth for scoping players/attendance/fees queries to the current staff member (despite the "coach" naming — kept as-is to minimize diff, since "coach" already colloquially meant "non-admin academy staff" throughout this codebase before Manager existed). Behavior branches on `role`:
+- **COACH**: scoped by **batch** (via the `coaches`/`coach_batches` tables), falling back to **branch** only if they have no batch assignments (`isBranchFallback`).
+- **MANAGER**: always branch-wide (via the `managers` table, no batch junction) — always returns `isBranchFallback: true`, since a Manager oversees every batch in their branch by definition.
+
+Both return the same `{ batchIds, branchIds, isBranchFallback }` shape, so every consumer (`coach-dashboard`, `my-players`, `my-attendance`, `my-fees`, `FeeReminders`) works for both roles unmodified. Two call sites bypass this helper and query `coaches`/`coach_batches` directly instead — `components/shared/AddPlayerModal.tsx` and `app/(coach)/my-attendance/page.tsx` — both have their own `MANAGER`-branch handling inline; if you add a 4th staff-type role, check these two first, they're the ones most likely to be missed. Results are memoized in an in-memory `Map` for the session (`clearCoachBatchInfoCache` busts it) — assignments rarely change mid-session, so don't add another cache layer on top.
 
 ### Server Actions pattern
 
@@ -131,7 +135,7 @@ Admin-created coach accounts get a random generated password and `user_metadata.
 
 ### Types
 
-`types/database.types.ts` mirrors the Supabase schema (tables: `branches`, `batches`, `profiles`, `coaches`, `coach_batches`, `players`, `attendance`, `fees`) and is hand-aligned with the DB, not auto-generated in a build step — update it manually alongside migrations. `types/app.types.ts` holds app-level domain interfaces (`UserProfile`, `Player`, `Fee`, etc.) used across components, which sometimes normalize/simplify the raw DB row shape (check both when a field seems missing).
+`types/database.types.ts` mirrors the Supabase schema (tables: `branches`, `batches`, `profiles`, `coaches`, `coach_batches`, `managers`, `players`, `attendance`, `fees`) and is hand-aligned with the DB, not auto-generated in a build step — update it manually alongside migrations. `types/app.types.ts` holds app-level domain interfaces (`UserProfile`, `Player`, `Fee`, etc.) used across components, which sometimes normalize/simplify the raw DB row shape (check both when a field seems missing).
 
 ### UI conventions
 
@@ -141,6 +145,8 @@ Admin-created coach accounts get a random generated password and `user_metadata.
 
 - **Typed Supabase client resolves to `never` once `as any` is removed.** Nearly every Server Action query in this codebase casts its client as `(supabase as any)` / `(adminClient as any)`. Removing those casts (verified via `npx tsc --noEmit`) causes widespread `TS2345`/`TS2339` errors — `.single()` results typed as `never`, `.insert()`/`.update()` payloads rejected — across `coaches`, `players`, `coach_batches`, and `fees`, including columns that are already correctly typed. This means the casts aren't just papering over missing columns; there's a deeper, undiagnosed generic-inference mismatch between `@supabase/supabase-js`'s typed query builder and this `Database` type shape (possibly tied to the pinned Next.js 16 / React 19 / TS `^5` combination). **Do not bulk-remove these casts without first running `npx tsc --noEmit` and root-causing the inference failure** — a partial removal will break the build.
 - `types/database.types.ts` is hand-maintained, not generated from the live schema. It has drifted from the actual Supabase schema before (see Key Decisions) and can drift again after any migration that isn't mirrored here.
+- `npm run lint` fails with ~270+ pre-existing errors across the repo (mostly `@typescript-eslint/no-explicit-any` from the `(supabase as any)` pattern above, and `react-hooks/set-state-in-effect` from calling `setState` synchronously in data-fetching `useEffect`s) — this predates any of the changes tracked in this file. Not something to fix opportunistically inside an unrelated task; treat as a known, separate cleanup effort.
+- `app/(admin)/managers/*` (actions/modals/table) duplicates the *pattern* of `app/(admin)/coaches/*` rather than sharing code — acceptable since Manager account creation genuinely differs (no batch-assignment step, simpler edit flow), but if the two ever need to change in lockstep, check both.
 
 ## Key Decisions
 
@@ -148,3 +154,4 @@ Append-only. One line per entry, dated, newest last. Only durable architectural/
 
 - 2026-09-14 — `types/database.types.ts` was missing `coaches.status`, `players.gender`, and `players.aadhar_number`, which exist in the live Supabase schema (confirmed via schema diagram). Added the missing columns to the type file. Did not attempt to remove the resulting `as any` casts in the same pass — see Known Gaps above for why that's a separate, larger fix.
 - 2026-09-14 — Fixed `lib/supabase/middleware.ts`'s `ADMIN_ROUTES`/`COACH_ROUTES` arrays: `ADMIN_ROUTES` was missing `/attendance`, and `COACH_ROUTES` referenced non-existent paths (`/coach-attendance`, `/coach-fees`) while missing the real `/my-players`, `/my-attendance`, `/my-fees`. Not a security hole (client-side `ProtectedRoute` still enforced role checks), but the middleware's first-line redirect was silently not firing for those routes. Verified with `npx tsc --noEmit` and a repo-wide grep for the old path strings.
+- 2026-09-14 — Added a `MANAGER` role (branch-wide staff access, same permissions as `COACH`). Chose a new `managers` table over reusing `coaches`, to keep Manager identity distinct in case its permissions diverge later. Chose to widen `app/(coach)/*` to both roles rather than build a parallel route tree, to avoid tripling existing Admin/Coach duplication — only `lib/coach.ts`'s scoping logic and two direct-query call sites (`AddPlayerModal.tsx`, `my-attendance/page.tsx`) needed role-branching. Manager account management (`app/(admin)/managers/*`) is new, mirrored-pattern code, not shared with `coaches/*` (see Known Gaps). RLS policies for `managers`/branch-wide access on `players`/`attendance`/`fees` were handed to the user as SQL to run manually — not verified against the live Supabase project from this repo.

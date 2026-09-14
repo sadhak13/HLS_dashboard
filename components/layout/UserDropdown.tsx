@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { KeyRound, LogOut, ChevronDown } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { logout } from '@/app/(auth)/login/actions';
+import { ROLE_LABELS } from '@/constants/roles';
 
 export function UserDropdown() {
   const { profile } = useAuth();
@@ -57,7 +58,7 @@ export function UserDropdown() {
               {profile?.full_name ?? '...'}
             </p>
             <span className="inline-block mt-1 text-xs px-2 py-0.5 bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 rounded-full font-medium">
-              {profile?.role === 'ADMIN' ? 'Admin' : 'Coach'}
+              {profile?.role ? ROLE_LABELS[profile.role] : ''}
             </span>
           </div>
 
