@@ -72,6 +72,7 @@ export function AddCoachModal({ isOpen, onClose, onSuccess }: AddCoachModalProps
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
+  const [monthlySalary, setMonthlySalary] = useState('');
 
   useEffect(() => {
     if (isOpen) {
@@ -102,6 +103,7 @@ export function AddCoachModal({ isOpen, onClose, onSuccess }: AddCoachModalProps
       setFullName('');
       setEmail('');
       setPhone('');
+      setMonthlySalary('');
       setSelectedBatchId('');
     }
   }, [isOpen]);
@@ -173,6 +175,7 @@ export function AddCoachModal({ isOpen, onClose, onSuccess }: AddCoachModalProps
     formData.append('fullName', fullName);
     formData.append('email', email);
     formData.append('phone', phone);
+    formData.append('monthlySalary', monthlySalary || '0');
     formData.append('batchIds', JSON.stringify(selectedBatchIds));
 
     // Primary branch_id for the coaches table
@@ -291,13 +294,25 @@ export function AddCoachModal({ isOpen, onClose, onSuccess }: AddCoachModalProps
               className={glassInputClass}
             />
           </div>
-          <div className="sm:col-span-2">
+          <div>
             <label className={glassLabelClass}>Phone Number</label>
             <input
               type="tel"
               placeholder="e.g. +91 9876543210"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
+              className={glassInputClass}
+            />
+          </div>
+          <div>
+            <label className={glassLabelClass}>Starting Salary (₹/month)</label>
+            <input
+              type="number"
+              min="0"
+              step="1"
+              placeholder="e.g. 20000"
+              value={monthlySalary}
+              onChange={(e) => setMonthlySalary(e.target.value)}
               className={glassInputClass}
             />
           </div>

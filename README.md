@@ -9,7 +9,7 @@ An internal management dashboard for **Hyderabad Little Stars (HLS) Soccer Acade
 - **Coach Management** — Account provisioning, branch & batch assignment, transfers
 - **Branch & Batch Management** — Multiple locations with configurable training time slots and days
 - **Attendance Tracking** — Daily present/absent marking with calendar view and filters
-- **Fee Management** — Monthly fee generation, payment tracking (paid/pending/overdue), bulk operations
+- **Fee Management** — Monthly fee generation, payment tracking (paid/pending), bulk operations
 - **Analytics Dashboard** — KPIs, charts, and stats for academy-wide or branch-level performance
 
 ## Tech Stack & Versions

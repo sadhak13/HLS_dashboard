@@ -10,7 +10,7 @@ interface FeeRecord {
   id: string;
   month: string;
   amount: number;
-  status: 'paid' | 'pending' | 'overdue';
+  status: 'paid' | 'pending';
   mode_of_payment: 'cash' | 'online' | 'cash+online' | null;
   paid_date: string | null;
   players: { full_name: string; branch_id: string; status?: string } | null;
@@ -33,7 +33,6 @@ function formatMonth(month: string): string {
 const statusConfig: Record<string, { variant: 'success' | 'warning' | 'danger'; label: string }> = {
   paid: { variant: 'success', label: 'Paid' },
   pending: { variant: 'warning', label: 'Pending' },
-  overdue: { variant: 'danger', label: 'Overdue' },
 };
 
 export const FeeTable = React.memo(function FeeTable({ fees, isLoading, onMarkPaid, onEdit }: FeeTableProps) {

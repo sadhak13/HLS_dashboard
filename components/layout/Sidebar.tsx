@@ -2,7 +2,7 @@ import React from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Users, UserSquare, UserCog, IndianRupee, MapPin, CalendarDays } from 'lucide-react';
+import { LayoutDashboard, Users, UserSquare, UserCog, IndianRupee, MapPin, CalendarDays, Wallet } from 'lucide-react';
 
 const navItems = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
@@ -12,6 +12,7 @@ const navItems = [
   { name: 'Players', href: '/players', icon: Users },
   { name: 'Fees', href: '/fees', icon: IndianRupee },
   { name: 'Attendance', href: '/attendance', icon: CalendarDays },
+  { name: 'Expenses', href: '/expenses', icon: Wallet },
 ];
 
 export function Sidebar({ isOpen, setIsOpen }: { isOpen: boolean; setIsOpen: (val: boolean) => void }) {

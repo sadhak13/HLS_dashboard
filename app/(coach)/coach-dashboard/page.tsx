@@ -108,7 +108,7 @@ export default function CoachDashboardPage() {
         .from('fees')
         .select('player_id, status, players(batch_id)')
         .in('branch_id', branchIds)
-        .in('status', ['pending', 'overdue']),
+        .eq('status', 'pending'),
       (supabase as any)
         .from('attendance')
         .select('status, batch_id')

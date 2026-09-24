@@ -7,9 +7,23 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { Button } from '@/components/ui/Button';
 import { Pagination } from '@/components/ui/Pagination';
 import { useToast } from '@/components/ui/Toast';
-import { UserPlus2, Users } from 'lucide-react';
+import { UserPlus2, Users, UserCheck, UserX, UserMinus } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import type { Database } from '@/types/database.types';
+
+function StatCard({ label, value, icon, color }: { label: string; value: number; icon: React.ReactNode; color: string }) {
+  return (
+    <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 flex items-center gap-4">
+      <div className={`flex items-center justify-center w-12 h-12 rounded-xl ${color}`}>
+        {icon}
+      </div>
+      <div>
+        <p className="text-sm text-gray-500 dark:text-gray-400">{label}</p>
+        <p className="text-xl font-bold text-gray-900 dark:text-white">{value}</p>
+      </div>
+    </div>
+  );
+}
 
 const AddPlayerModal = dynamic(() => import('@/components/shared/AddPlayerModal').then(m => ({ default: m.AddPlayerModal })), { ssr: false });
 const AddFeesForNewPlayerModal = dynamic(() => import('@/components/coach/AddFeesForNewPlayerModal').then(m => ({ default: m.AddFeesForNewPlayerModal })), { ssr: false });
@@ -34,6 +48,7 @@ export default function PlayersPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 15;
   const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [statusCounts, setStatusCounts] = useState({ active: 0, inactive: 0, dropped: 0 });
 
   // Delete modal state
   const [playerToDelete, setPlayerToDelete] = useState<Player | null>(null);
@@ -101,6 +116,27 @@ export default function PlayersPage() {
     fetchPlayers(currentPage, searchQuery, filterBranch, filterBatch);
   }, [fetchPlayers, currentPage, searchQuery, filterBranch, filterBatch]);
 
+  const fetchStatusCounts = useCallback(async (branch: string, batch: string) => {
+    let query = supabase.from('players').select('status');
+    if (branch !== 'all') query = query.eq('branch_id', branch);
+    if (batch !== 'all') query = query.eq('batch_id', batch);
+
+    const { data } = await query as { data: { status: string }[] | null };
+    if (data) {
+      const counts = { active: 0, inactive: 0, dropped: 0 };
+      data.forEach((p) => {
+        if (p.status === 'active' || p.status === 'inactive' || p.status === 'dropped') {
+          counts[p.status]++;
+        }
+      });
+      setStatusCounts(counts);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    fetchStatusCounts(filterBranch, filterBatch);
+  }, [fetchStatusCounts, filterBranch, filterBatch]);
+
   const handleEdit = (player: Player) => {
     setEditingPlayer(player);
     setIsModalOpen(true);
@@ -114,6 +150,7 @@ export default function PlayersPage() {
   // Called after AddPlayerModal succeeds. If player data is returned (new player), open the fees modal.
   const handlePlayerSuccess = (playerData?: { id: string; full_name: string; branch_id: string; enrolled_date: string }) => {
     fetchPlayers(currentPage, searchQuery, filterBranch, filterBatch);
+    fetchStatusCounts(filterBranch, filterBatch);
     if (playerData?.id) {
       setNewPlayerData(playerData);
       setShowAddFeesModal(true);
@@ -129,6 +166,7 @@ export default function PlayersPage() {
     setShowDeleteModal(false);
     setPlayerToDelete(null);
     fetchPlayers(currentPage, searchQuery, filterBranch, filterBatch);
+    fetchStatusCounts(filterBranch, filterBatch);
   };
 
   const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
@@ -173,6 +211,29 @@ export default function PlayersPage() {
           </Button>
         )}
       </div>
+
+      {totalCount > 0 && (
+        <div className="grid grid-cols-3 gap-3 sm:gap-4">
+          <StatCard
+            label="Active"
+            value={statusCounts.active}
+            icon={<UserCheck className="w-5 h-5 text-green-600" />}
+            color="bg-green-100 dark:bg-green-900/30"
+          />
+          <StatCard
+            label="Inactive"
+            value={statusCounts.inactive}
+            icon={<UserX className="w-5 h-5 text-amber-600" />}
+            color="bg-amber-100 dark:bg-amber-900/30"
+          />
+          <StatCard
+            label="Dropped"
+            value={statusCounts.dropped}
+            icon={<UserMinus className="w-5 h-5 text-red-600" />}
+            color="bg-red-100 dark:bg-red-900/30"
+          />
+        </div>
+      )}
 
       {/* Search & Filters */}
       {(totalCount > 0 || searchQuery) && (

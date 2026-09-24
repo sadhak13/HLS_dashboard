@@ -8,6 +8,8 @@ import {
   Clock, CheckCheck, X, ChevronLeft, ChevronRight, Filter, Pencil
 } from 'lucide-react';
 import { clientCache } from '@/lib/clientCache';
+import { AbsenceReasonFields } from '@/components/shared/AbsenceReasonFields';
+import { ABSENCE_REASON_LABELS } from '@/lib/validations';
 
 interface Player {
   id: string;
@@ -27,6 +29,15 @@ type AttendanceStatus = 'present' | 'absent';
 
 interface AttendanceState {
   [playerId: string]: AttendanceStatus;
+}
+
+interface AbsenceReason {
+  category: string;
+  note: string;
+}
+
+interface AbsenceReasonState {
+  [playerId: string]: AbsenceReason;
 }
 
 function getTodayString() {
@@ -158,6 +169,14 @@ export default function CoachAttendancePage() {
     if (cacheKeyPlayers) {
       const cached = clientCache.get<{ attendance: AttendanceState }>(cacheKeyPlayers);
       if (cached) return cached.attendance;
+    }
+    return {};
+  });
+
+  const [reasons, setReasons] = useState<AbsenceReasonState>(() => {
+    if (cacheKeyPlayers) {
+      const cached = clientCache.get<{ reasons?: AbsenceReasonState }>(cacheKeyPlayers);
+      if (cached?.reasons) return cached.reasons;
     }
     return {};
   });
@@ -316,6 +335,7 @@ export default function CoachAttendancePage() {
     setSubmitSuccess(false);
     setIsEditing(false);
     setAttendance({});
+    setReasons({});
 
     const { data: batchInfo } = await (supabase as any)
       .from('batches')
@@ -349,11 +369,12 @@ export default function CoachAttendancePage() {
 
     let currentAlreadySubmitted = false;
     let currentAttendance: AttendanceState = {};
+    let currentReasons: AbsenceReasonState = {};
 
     if (playerList.length > 0) {
       const { data: existingAttendance } = await (supabase as any)
         .from('attendance')
-        .select('player_id, status')
+        .select('player_id, status, absence_reason_category, absence_reason_note')
         .eq('batch_id', batchId)
         .eq('date', date);
 
@@ -361,6 +382,12 @@ export default function CoachAttendancePage() {
         currentAlreadySubmitted = true;
         existingAttendance.forEach((r: any) => {
           currentAttendance[r.player_id] = r.status as AttendanceStatus;
+          if (r.absence_reason_category || r.absence_reason_note) {
+            currentReasons[r.player_id] = {
+              category: r.absence_reason_category || '',
+              note: r.absence_reason_note || '',
+            };
+          }
         });
       } else {
         if (date === today) {
@@ -373,11 +400,13 @@ export default function CoachAttendancePage() {
 
     setAlreadySubmitted(currentAlreadySubmitted);
     setAttendance(currentAttendance);
+    setReasons(currentReasons);
 
     if (cacheKeyPlayers) {
       clientCache.set(cacheKeyPlayers, {
         players: playerList,
         attendance: currentAttendance,
+        reasons: currentReasons,
         alreadySubmitted: currentAlreadySubmitted,
       });
     }
@@ -403,10 +432,24 @@ export default function CoachAttendancePage() {
 
   const toggle = (playerId: string) => {
     if (!canModify) return;
-    setAttendance((prev) => ({
-      ...prev,
-      [playerId]: prev[playerId] === 'present' ? 'absent' : 'present',
-    }));
+    setAttendance((prev) => {
+      const next = prev[playerId] === 'present' ? 'absent' : 'present';
+      if (next === 'present') {
+        setReasons((prevReasons) => {
+          if (!(playerId in prevReasons)) return prevReasons;
+          const { [playerId]: _removed, ...rest } = prevReasons;
+          return rest;
+        });
+      }
+      return { ...prev, [playerId]: next };
+    });
+  };
+
+  const setReasonForPlayer = (playerId: string, reason: Partial<AbsenceReason>) => {
+    setReasons((prev) => {
+      const existing: AbsenceReason = prev[playerId] ?? { category: '', note: '' };
+      return { ...prev, [playerId]: { ...existing, ...reason } };
+    });
   };
 
   const markAllPresent = () => {
@@ -414,6 +457,7 @@ export default function CoachAttendancePage() {
     const all: AttendanceState = {};
     players.forEach(p => { all[p.id] = 'present'; });
     setAttendance(all);
+    setReasons({});
   };
 
   const markAllAbsent = () => {
@@ -427,20 +471,30 @@ export default function CoachAttendancePage() {
     if (!branchId || isSubmitting) return;
     setIsSubmitting(true);
 
-    const records = players.map((p) => ({
-      player_id: p.id,
-      branch_id: branchId,
-      batch_id: selectedBatchId || null,
-      date: selectedDate,
-      status: attendance[p.id] ?? 'present',
-    }));
+    const records = players.map((p) => {
+      const status = attendance[p.id] ?? 'present';
+      const reason = status === 'absent' ? reasons[p.id] : undefined;
+      return {
+        player_id: p.id,
+        branch_id: branchId,
+        batch_id: selectedBatchId || null,
+        date: selectedDate,
+        status,
+        absence_reason_category: reason?.category || null,
+        absence_reason_note: reason?.note || null,
+      };
+    });
 
     let error;
     if (isEditing) {
       const updates = records.map(async (record) => {
         const { error: err } = await (supabase as any)
           .from('attendance')
-          .update({ status: record.status })
+          .update({
+            status: record.status,
+            absence_reason_category: record.absence_reason_category,
+            absence_reason_note: record.absence_reason_note,
+          })
           .eq('player_id', record.player_id)
           .eq('batch_id', record.batch_id)
           .eq('date', record.date);
@@ -468,6 +522,7 @@ export default function CoachAttendancePage() {
         clientCache.set(cacheKeyPlayers, {
           players,
           attendance,
+          reasons,
           alreadySubmitted: true,
         });
       }
@@ -729,50 +784,70 @@ export default function CoachAttendancePage() {
                       const status = attendance[player.id];
                       const isPresent = status === 'present';
                       const canToggle = canModify && isToday;
+                      const reason = reasons[player.id];
 
                       return (
-                        <button
-                          key={player.id}
-                          onClick={() => toggle(player.id)}
-                          disabled={!canToggle}
-                          className={`w-full grid grid-cols-[1fr_auto] gap-4 px-5 py-3.5 text-left transition-all ${
-                            canToggle
-                              ? 'cursor-pointer hover:bg-white/[0.03] active:bg-white/[0.05]'
-                              : 'cursor-default'
-                          }`}
-                        >
-                          <div className="flex items-center gap-3">
-                            <div className={`flex items-center justify-center w-9 h-9 rounded-full text-sm font-semibold transition-colors shrink-0 ${
-                              isPresent
-                                ? 'bg-green-500/20 border border-green-500/30 text-green-400'
-                                : 'bg-red-500/20 border border-red-500/30 text-red-400'
-                            }`}>
-                              {player.full_name.charAt(0).toUpperCase()}
-                            </div>
-                            <div className="min-w-0">
-                              <p className="font-medium text-white text-sm truncate">{player.full_name}</p>
-                              <p className="text-[11px] text-gray-500">#{index + 1}</p>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center">
-                            {status ? (
-                              <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold ${
+                        <div key={player.id}>
+                          <button
+                            onClick={() => toggle(player.id)}
+                            disabled={!canToggle}
+                            className={`w-full grid grid-cols-[1fr_auto] gap-4 px-5 py-3.5 text-left transition-all ${
+                              canToggle
+                                ? 'cursor-pointer hover:bg-white/[0.03] active:bg-white/[0.05]'
+                                : 'cursor-default'
+                            }`}
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className={`flex items-center justify-center w-9 h-9 rounded-full text-sm font-semibold transition-colors shrink-0 ${
                                 isPresent
-                                  ? 'bg-green-500/10 border border-green-500/20 text-green-400'
-                                  : 'bg-red-500/10 border border-red-500/20 text-red-400'
+                                  ? 'bg-green-500/20 border border-green-500/30 text-green-400'
+                                  : 'bg-red-500/20 border border-red-500/30 text-red-400'
                               }`}>
-                                {isPresent ? (
-                                  <><CheckCircle className="w-3.5 h-3.5" /> Present</>
-                                ) : (
-                                  <><XCircle className="w-3.5 h-3.5" /> Absent</>
-                                )}
+                                {player.full_name.charAt(0).toUpperCase()}
                               </div>
-                            ) : (
-                              <span className="text-xs text-gray-500">—</span>
-                            )}
-                          </div>
-                        </button>
+                              <div className="min-w-0">
+                                <p className="font-medium text-white text-sm truncate">{player.full_name}</p>
+                                <p className="text-[11px] text-gray-500">#{index + 1}</p>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center">
+                              {status ? (
+                                <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold ${
+                                  isPresent
+                                    ? 'bg-green-500/10 border border-green-500/20 text-green-400'
+                                    : 'bg-red-500/10 border border-red-500/20 text-red-400'
+                                }`}>
+                                  {isPresent ? (
+                                    <><CheckCircle className="w-3.5 h-3.5" /> Present</>
+                                  ) : (
+                                    <><XCircle className="w-3.5 h-3.5" /> Absent</>
+                                  )}
+                                </div>
+                              ) : (
+                                <span className="text-xs text-gray-500">—</span>
+                              )}
+                            </div>
+                          </button>
+
+                          {status === 'absent' && canToggle && (
+                            <div className="px-5 pb-3.5">
+                              <AbsenceReasonFields
+                                category={reason?.category ?? ''}
+                                note={reason?.note ?? ''}
+                                onCategoryChange={(category) => setReasonForPlayer(player.id, { category })}
+                                onNoteChange={(note) => setReasonForPlayer(player.id, { note })}
+                              />
+                            </div>
+                          )}
+
+                          {status === 'absent' && !canToggle && (reason?.category || reason?.note) && (
+                            <p className="px-5 pb-3 text-[11px] text-gray-500">
+                              Reason: {reason?.category ? (ABSENCE_REASON_LABELS[reason.category as keyof typeof ABSENCE_REASON_LABELS] ?? reason.category) : ''}
+                              {reason?.note ? ` — ${reason.note}` : ''}
+                            </p>
+                          )}
+                        </div>
                       );
                     })}
                   </div>

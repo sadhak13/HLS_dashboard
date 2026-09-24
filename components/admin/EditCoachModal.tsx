@@ -3,7 +3,11 @@
 import React, { useState, useEffect } from 'react';
 import { Modal } from '@/components/ui/Modal';
 import { updateCoachDetails, getCoachEmail } from '@/app/(admin)/coaches/actions';
+import { SalaryHistoryModal } from '@/components/admin/SalaryHistoryModal';
 import { createClient } from '@/lib/supabase/client';
+import { resolveAsOf } from '@/lib/finance';
+import { format } from 'date-fns';
+import type { CoachSalaryHistoryEntry } from '@/types/app.types';
 import { Clock, MapPin, Plus, Trash2, AlertCircle } from 'lucide-react';
 
 interface Batch {
@@ -75,6 +79,14 @@ export function EditCoachModal({ isOpen, onClose, onSuccess, coach }: EditCoachM
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
+  const [salaryHistory, setSalaryHistory] = useState<CoachSalaryHistoryEntry[]>([]);
+  const [isSalaryModalOpen, setIsSalaryModalOpen] = useState(false);
+
+  const fetchSalaryHistory = async (coachId: string) => {
+    const supabase = createClient();
+    const { data } = await (supabase as any).from('coach_salary_history').select('*').eq('coach_id', coachId);
+    setSalaryHistory(data ?? []);
+  };
 
   useEffect(() => {
     if (isOpen && coach) {
@@ -95,6 +107,7 @@ export function EditCoachModal({ isOpen, onClose, onSuccess, coach }: EditCoachM
         }
       };
       fetchData();
+      fetchSalaryHistory(coach.id);
 
       // Fetch email from auth
       getCoachEmail(coach.user_id).then(({ email: e }) => setEmail(e));
@@ -106,6 +119,11 @@ export function EditCoachModal({ isOpen, onClose, onSuccess, coach }: EditCoachM
       setOverlapWarning('');
     }
   }, [isOpen, coach]);
+
+  const currentSalary = resolveAsOf(
+    salaryHistory.map(h => ({ effectiveFrom: h.effective_from, value: h.monthly_salary })),
+    format(new Date(), 'yyyy-MM')
+  );
 
   const allBatches = branches.flatMap(b => b.batches.map(batch => ({ ...batch, branchName: b.name })));
 
@@ -193,7 +211,8 @@ export function EditCoachModal({ isOpen, onClose, onSuccess, coach }: EditCoachM
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Edit Coach Details" maxWidth="md">
+    <>
+    <Modal isOpen={isOpen && !isSalaryModalOpen} onClose={onClose} title="Edit Coach Details" maxWidth="md">
       <form onSubmit={handleSubmit} className="space-y-5">
         {error && (
           <div className="flex items-start gap-3 p-3.5 rounded-xl bg-red-500/10 border border-red-500/20">
@@ -231,7 +250,7 @@ export function EditCoachModal({ isOpen, onClose, onSuccess, coach }: EditCoachM
               className={glassInputClass}
             />
           </div>
-          <div className="sm:col-span-2">
+          <div>
             <label className={glassLabelClass}>Phone Number</label>
             <input
               type="tel"
@@ -240,6 +259,21 @@ export function EditCoachModal({ isOpen, onClose, onSuccess, coach }: EditCoachM
               onChange={(e) => setPhone(e.target.value)}
               className={glassInputClass}
             />
+          </div>
+          <div>
+            <label className={glassLabelClass}>Monthly Salary</label>
+            <div className="flex items-center justify-between px-4 py-2.5 rounded-xl bg-white/[0.05] border border-white/10">
+              <span className="text-sm text-white">
+                {currentSalary !== null ? `₹${currentSalary.toLocaleString('en-IN')}/month` : 'Not set'}
+              </span>
+              <button
+                type="button"
+                onClick={() => setIsSalaryModalOpen(true)}
+                className="text-xs font-semibold text-green-400 hover:text-green-300 transition-colors"
+              >
+                Manage
+              </button>
+            </div>
           </div>
         </div>
 
@@ -368,5 +402,17 @@ export function EditCoachModal({ isOpen, onClose, onSuccess, coach }: EditCoachM
         </div>
       </form>
     </Modal>
+
+    {coach && (
+      <SalaryHistoryModal
+        isOpen={isSalaryModalOpen}
+        onClose={() => setIsSalaryModalOpen(false)}
+        onSuccess={() => fetchSalaryHistory(coach.id)}
+        coachId={coach.id}
+        coachName={fullName}
+        history={salaryHistory}
+      />
+    )}
+    </>
   );
 }

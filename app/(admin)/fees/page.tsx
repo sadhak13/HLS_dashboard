@@ -9,7 +9,7 @@ import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { Pagination } from '@/components/ui/Pagination';
 import { useToast } from '@/components/ui/Toast';
-import { IndianRupee, Plus, TrendingUp, Clock, AlertCircle, Zap, ChevronLeft, ChevronRight, FileSpreadsheet, Users, UserX, Search } from 'lucide-react';
+import { IndianRupee, Plus, TrendingUp, Clock, Zap, ChevronLeft, ChevronRight, FileSpreadsheet, Users, UserX, Search } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { generateNextMonthFeesForAllBranches } from '@/app/(admin)/fees/actions';
 import { format, addMonths, subMonths, isAfter, startOfMonth } from 'date-fns';
@@ -41,7 +41,7 @@ export default function FeesPage() {
   const [totalCount, setTotalCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [filterStatus, setFilterStatus] = useState<'all' | 'paid' | 'pending' | 'overdue'>('all');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'paid' | 'pending'>('all');
   const [filterBranch, setFilterBranch] = useState('all');
   const [filterBatch, setFilterBatch] = useState('all');
   const [branches, setBranches] = useState<{ id: string; name: string }[]>([]);
@@ -60,10 +60,18 @@ export default function FeesPage() {
   const ITEMS_PER_PAGE = 20;
 
   // Stats are fetched separately to avoid coupling with pagination
-  const [stats, setStats] = useState({ collected: 0, pending: 0, overdue: 0, paidCount: 0, unpaidCount: 0 });
+  const [stats, setStats] = useState({ collected: 0, pending: 0, paidCount: 0, unpaidCount: 0 });
   const [isExporting, setIsExporting] = useState(false);
 
   const supabase = createClient();
+
+  // Respect a `?status=` link from elsewhere (e.g. the Dashboard's Pending Dues card)
+  useEffect(() => {
+    const status = new URLSearchParams(window.location.search).get('status');
+    if (status === 'paid' || status === 'pending') {
+      setFilterStatus(status);
+    }
+  }, []);
 
   useEffect(() => {
     const fetchFilters = async () => {
@@ -122,8 +130,8 @@ export default function FeesPage() {
 
   const fetchStats = useCallback(async (branch: string, batch: string) => {
     const selectStr = batch !== 'all'
-      ? 'player_id, status, amount, players!inner (batch_id)'
-      : 'player_id, status, amount';
+      ? 'player_id, status, amount, players!inner (batch_id, status)'
+      : 'player_id, status, amount, players (status)';
 
     let query = supabase
       .from('fees')
@@ -138,15 +146,20 @@ export default function FeesPage() {
       query = query.eq('players.batch_id', batch);
     }
 
-    const { data } = await query as { data: { player_id: string; status: string; amount: number }[] | null };
+    const { data } = await query as { data: { player_id: string; status: string; amount: number; players: { status: string } | null }[] | null };
 
     if (data) {
+      // Amounts owed/collected count every billed fee regardless of whether the player is still
+      // active today — money owed doesn't disappear just because someone left.
       const collected = data.filter(f => f.status === 'paid').reduce((s, f) => s + f.amount, 0);
       const pending = data.filter(f => f.status === 'pending').reduce((s, f) => s + f.amount, 0);
-      const overdue = data.filter(f => f.status === 'overdue').reduce((s, f) => s + f.amount, 0);
-      const paidCount = new Set(data.filter(f => f.status === 'paid').map(f => f.player_id).filter(Boolean)).size;
-      const unpaidCount = new Set(data.filter(f => f.status === 'pending' || f.status === 'overdue').map(f => f.player_id).filter(Boolean)).size;
-      setStats({ collected, pending, overdue, paidCount, unpaidCount });
+      // Paid/Unpaid Players counts are scoped to currently-active players only, so they stay
+      // comparable to "Total Active Players" elsewhere instead of including players who've since
+      // gone inactive/dropped but still have a fee record for this month.
+      const activeOnly = data.filter(f => f.players?.status === 'active');
+      const paidCount = new Set(activeOnly.filter(f => f.status === 'paid').map(f => f.player_id).filter(Boolean)).size;
+      const unpaidCount = new Set(activeOnly.filter(f => f.status === 'pending').map(f => f.player_id).filter(Boolean)).size;
+      setStats({ collected, pending, paidCount, unpaidCount });
     }
   }, [selectedMonthStr]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -222,7 +235,7 @@ export default function FeesPage() {
 
   const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
 
-  const handleFilterChange = (s: 'all' | 'paid' | 'pending' | 'overdue') => {
+  const handleFilterChange = (s: 'all' | 'paid' | 'pending') => {
     setFilterStatus(s);
     setCurrentPage(1);
   };
@@ -437,7 +450,7 @@ export default function FeesPage() {
       )}
 
       {/* Summary cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
         <StatCard
           label="Total Collected"
           value={`₹${stats.collected.toLocaleString('en-IN')}`}
@@ -449,12 +462,6 @@ export default function FeesPage() {
           value={`₹${stats.pending.toLocaleString('en-IN')}`}
           icon={<Clock className="w-5 h-5 text-amber-600" />}
           color="bg-amber-100 dark:bg-amber-900/30"
-        />
-        <StatCard
-          label="Overdue"
-          value={`₹${stats.overdue.toLocaleString('en-IN')}`}
-          icon={<AlertCircle className="w-5 h-5 text-red-600" />}
-          color="bg-red-100 dark:bg-red-900/30"
         />
         <StatCard
           label="Paid Players"
@@ -494,7 +501,7 @@ export default function FeesPage() {
       {/* Filter tabs */}
       {fees.length > 0 && (
         <div className="flex gap-2 flex-wrap">
-          {(['all', 'paid', 'pending', 'overdue'] as const).map((s) => (
+          {(['all', 'paid', 'pending'] as const).map((s) => (
             <button
               key={s}
               onClick={() => handleFilterChange(s)}

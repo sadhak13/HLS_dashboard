@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { STAFF_ROLES } from '@/constants/roles'
 
 const PUBLIC_ROUTES = ['/login']
-const ADMIN_ROUTES = ['/dashboard', '/branches', '/coaches', '/managers', '/players', '/fees', '/attendance']
+const ADMIN_ROUTES = ['/dashboard', '/branches', '/coaches', '/managers', '/players', '/fees', '/attendance', '/expenses']
 const COACH_ROUTES = ['/coach-dashboard', '/my-players', '/my-attendance', '/my-fees']
 
 export async function updateSession(request: NextRequest) {

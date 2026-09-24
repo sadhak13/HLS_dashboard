@@ -5,15 +5,24 @@ import { createClient } from '@/lib/supabase/client';
 import { CalendarDays, Filter, Users, CheckCircle, XCircle, TrendingUp, ChevronLeft, ChevronRight, Search, Clock, Pencil, Save, X } from 'lucide-react';
 import { Pagination } from '@/components/ui/Pagination';
 import { clientCache } from '@/lib/clientCache';
+import { AbsenceReasonFields } from '@/components/shared/AbsenceReasonFields';
+import { ABSENCE_REASON_LABELS } from '@/lib/validations';
 
 interface AttendanceRecord {
   id: string;
   date: string;
   status: 'present' | 'absent';
   batch_id: string | null;
+  absence_reason_category: string | null;
+  absence_reason_note: string | null;
   players: { full_name: string } | null;
   branches: { name: string } | null;
   batches: { name: string } | null;
+}
+
+interface AbsenceReason {
+  category: string;
+  note: string;
 }
 
 interface BatchOption {
@@ -124,6 +133,7 @@ export default function AdminAttendancePage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [isEditing, setIsEditing] = useState(false);
   const [editedStatuses, setEditedStatuses] = useState<Record<string, 'present' | 'absent'>>({});
+  const [editedReasons, setEditedReasons] = useState<Record<string, AbsenceReason>>({});
   const [isSaving, setIsSaving] = useState(false);
   const ITEMS_PER_PAGE = 20;
 
@@ -190,31 +200,65 @@ export default function AdminAttendancePage() {
 
   const handleStartEdit = () => {
     const statuses: Record<string, 'present' | 'absent'> = {};
-    records.forEach(r => { statuses[r.id] = r.status; });
+    const reasons: Record<string, AbsenceReason> = {};
+    records.forEach(r => {
+      statuses[r.id] = r.status;
+      if (r.absence_reason_category || r.absence_reason_note) {
+        reasons[r.id] = { category: r.absence_reason_category || '', note: r.absence_reason_note || '' };
+      }
+    });
     setEditedStatuses(statuses);
+    setEditedReasons(reasons);
     setIsEditing(true);
   };
 
   const handleCancelEdit = () => {
     setIsEditing(false);
     setEditedStatuses({});
+    setEditedReasons({});
   };
 
   const handleToggleStatus = (recordId: string) => {
-    setEditedStatuses(prev => ({
-      ...prev,
-      [recordId]: prev[recordId] === 'present' ? 'absent' : 'present',
-    }));
+    setEditedStatuses(prev => {
+      const next = prev[recordId] === 'present' ? 'absent' : 'present';
+      if (next === 'present') {
+        setEditedReasons(prevReasons => {
+          if (!(recordId in prevReasons)) return prevReasons;
+          const { [recordId]: _removed, ...rest } = prevReasons;
+          return rest;
+        });
+      }
+      return { ...prev, [recordId]: next };
+    });
+  };
+
+  const setReasonForRecord = (recordId: string, reason: Partial<AbsenceReason>) => {
+    setEditedReasons(prev => {
+      const existing: AbsenceReason = prev[recordId] ?? { category: '', note: '' };
+      return { ...prev, [recordId]: { ...existing, ...reason } };
+    });
   };
 
   const handleSaveEdit = async () => {
     setIsSaving(true);
-    const changedRecords = records.filter(r => editedStatuses[r.id] !== r.status);
+    const reasonChanged = (r: AttendanceRecord) => {
+      const edited = editedReasons[r.id];
+      const editedCategory = edited?.category || '';
+      const editedNote = edited?.note || '';
+      return editedCategory !== (r.absence_reason_category || '') || editedNote !== (r.absence_reason_note || '');
+    };
+    const changedRecords = records.filter(r => editedStatuses[r.id] !== r.status || reasonChanged(r));
 
     const updates = changedRecords.map(async (record) => {
+      const finalStatus = editedStatuses[record.id];
+      const reason = finalStatus === 'absent' ? editedReasons[record.id] : undefined;
       const { error } = await (supabase as any)
         .from('attendance')
-        .update({ status: editedStatuses[record.id] })
+        .update({
+          status: finalStatus,
+          absence_reason_category: reason?.category || null,
+          absence_reason_note: reason?.note || null,
+        })
         .eq('id', record.id);
       return error;
     });
@@ -223,17 +267,21 @@ export default function AdminAttendancePage() {
     const hasError = results.some(e => e !== null);
 
     if (!hasError) {
-      setRecords(prev => prev.map(r => ({
-        ...r,
-        status: editedStatuses[r.id] || r.status,
-      })));
-      const updatedRecords = records.map(r => ({
-        ...r,
-        status: editedStatuses[r.id] || r.status,
-      }));
-      clientCache.set(recordCacheKeyWithDate, updatedRecords);
+      const applyEdits = (r: AttendanceRecord): AttendanceRecord => {
+        const finalStatus = editedStatuses[r.id] || r.status;
+        const reason = finalStatus === 'absent' ? editedReasons[r.id] : undefined;
+        return {
+          ...r,
+          status: finalStatus,
+          absence_reason_category: reason?.category || null,
+          absence_reason_note: reason?.note || null,
+        };
+      };
+      setRecords(prev => prev.map(applyEdits));
+      clientCache.set(recordCacheKeyWithDate, records.map(applyEdits));
       setIsEditing(false);
       setEditedStatuses({});
+      setEditedReasons({});
     }
 
     setIsSaving(false);
@@ -423,8 +471,12 @@ export default function AdminAttendancePage() {
 
                 {/* Records */}
                 <div className="divide-y divide-white/5">
-                  {paginatedRecords.map((record) => (
-                    <div key={record.id} className="grid grid-cols-1 sm:grid-cols-[2fr_1fr_1fr_1fr] gap-2 sm:gap-4 px-6 py-4 hover:bg-white/[0.02] transition-colors">
+                  {paginatedRecords.map((record) => {
+                    const currentStatus = isEditing ? (editedStatuses[record.id] || record.status) : record.status;
+                    const reason = editedReasons[record.id];
+                    return (
+                    <div key={record.id}>
+                    <div className="grid grid-cols-1 sm:grid-cols-[2fr_1fr_1fr_1fr] gap-2 sm:gap-4 px-6 py-4 hover:bg-white/[0.02] transition-colors">
                       {/* Player */}
                       <div className="flex items-center gap-3">
                         <div className={`flex items-center justify-center w-9 h-9 rounded-full text-sm font-semibold text-white ${
@@ -477,7 +529,27 @@ export default function AdminAttendancePage() {
                         )}
                       </div>
                     </div>
-                  ))}
+
+                    {currentStatus === 'absent' && isEditing && (
+                      <div className="px-6 pb-4">
+                        <AbsenceReasonFields
+                          category={reason?.category ?? ''}
+                          note={reason?.note ?? ''}
+                          onCategoryChange={(category) => setReasonForRecord(record.id, { category })}
+                          onNoteChange={(note) => setReasonForRecord(record.id, { note })}
+                        />
+                      </div>
+                    )}
+
+                    {currentStatus === 'absent' && !isEditing && (record.absence_reason_category || record.absence_reason_note) && (
+                      <p className="px-6 pb-3 text-[11px] text-gray-500">
+                        Reason: {record.absence_reason_category ? (ABSENCE_REASON_LABELS[record.absence_reason_category as keyof typeof ABSENCE_REASON_LABELS] ?? record.absence_reason_category) : ''}
+                        {record.absence_reason_note ? ` — ${record.absence_reason_note}` : ''}
+                      </p>
+                    )}
+                    </div>
+                    );
+                  })}
                 </div>
 
                 {/* Pagination Controls */}

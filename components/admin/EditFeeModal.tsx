@@ -10,7 +10,7 @@ export interface FeeRecord {
   id: string;
   month: string;
   amount: number;
-  status: 'paid' | 'pending' | 'overdue';
+  status: 'paid' | 'pending';
   mode_of_payment: 'cash' | 'online' | 'cash+online' | null;
   paid_date: string | null;
   players: { full_name: string; branch_id: string } | null;
@@ -29,7 +29,7 @@ export function EditFeeModal({ isOpen, onClose, onSuccess, fee }: EditFeeModalPr
   const [error, setError] = useState('');
   
   const [amount, setAmount] = useState('');
-  const [status, setStatus] = useState<'paid' | 'pending' | 'overdue'>('pending');
+  const [status, setStatus] = useState<'paid' | 'pending'>('pending');
   const [modeOfPayment, setModeOfPayment] = useState<'cash' | 'online' | 'cash+online' | ''>('');
   const [paidDate, setPaidDate] = useState('');
 
@@ -123,7 +123,6 @@ export function EditFeeModal({ isOpen, onClose, onSuccess, fee }: EditFeeModalPr
           >
             <option value="pending">Pending</option>
             <option value="paid">Paid</option>
-            <option value="overdue">Overdue</option>
           </select>
         </div>
 

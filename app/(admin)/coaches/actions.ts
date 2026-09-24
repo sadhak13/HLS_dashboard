@@ -4,7 +4,9 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
 import { randomBytes } from 'crypto'
 import { z } from 'zod'
+import { format } from 'date-fns'
 import { rateLimit } from '@/lib/rate-limit'
+import { coachSalaryChangeSchema, parseFormData } from '@/lib/validations'
 import type { Database } from '@/types/database.types'
 
 type ProfileInsert = Database['public']['Tables']['profiles']['Insert']
@@ -158,7 +160,7 @@ export async function deactivateCoach(coachId: string) {
   // Set coach status to inactive
   const { error: statusError } = await (adminClient as any)
     .from('coaches')
-    .update({ status: 'inactive' })
+    .update({ status: 'inactive', deactivated_at: new Date().toISOString() })
     .eq('id', coachId)
 
   if (statusError) {
@@ -196,7 +198,7 @@ export async function reactivateCoach(coachId: string) {
 
   const { error: statusError } = await (adminClient as any)
     .from('coaches')
-    .update({ status: 'active' })
+    .update({ status: 'active', deactivated_at: null })
     .eq('id', coachId)
 
   if (statusError) {
@@ -330,6 +332,7 @@ const coachFormSchema = z.object({
   fullName: z.string().min(3, 'Full name must be at least 3 characters'),
   branchId: z.string().uuid('Invalid branch'),
   phone: z.string().optional().default(''),
+  monthlySalary: z.coerce.number().nonnegative('Salary must be zero or positive').optional().default(0),
   batchIds: z.string().transform(s => {
     try { return JSON.parse(s) as string[] } catch { return [] }
   }),
@@ -346,7 +349,7 @@ export async function createCoachAccount(formData: FormData) {
     return { error: parsed.error.issues[0].message }
   }
 
-  const { email, fullName, branchId, phone, batchIds } = parsed.data
+  const { email, fullName, branchId, phone, monthlySalary, batchIds } = parsed.data
 
   if (batchIds.length === 0) {
     return { error: 'At least one batch must be assigned' }
@@ -400,6 +403,13 @@ export async function createCoachAccount(formData: FormData) {
     return { error: coachError.message }
   }
 
+  // 3b. Record their starting salary as the first revision, effective this month
+  await (adminClient as any).from('coach_salary_history').insert({
+    coach_id: (coachData as any).id,
+    monthly_salary: monthlySalary,
+    effective_from: format(new Date(), 'yyyy-MM'),
+  })
+
   // 4. Create coach_batches junction records
   if (batchIds.length > 0) {
     const junctionRecords = batchIds.map(batchId => ({
@@ -411,4 +421,29 @@ export async function createCoachAccount(formData: FormData) {
 
   revalidatePath('/coaches')
   return { success: true, email, password }
+}
+
+export async function recordCoachSalaryChange(formData: FormData) {
+  const rl = rateLimit('record-coach-salary-change', { maxRequests: 10, windowMs: 60_000 })
+  if (!rl.success) return { error: rl.error }
+
+  const parsed = parseFormData(coachSalaryChangeSchema, formData)
+  if ('error' in parsed) return parsed
+
+  const { coachId, monthlySalary, effectiveFrom } = parsed
+
+  const adminClient = createAdminClient()
+
+  const { error } = await (adminClient as any)
+    .from('coach_salary_history')
+    .upsert(
+      { coach_id: coachId, monthly_salary: monthlySalary, effective_from: effectiveFrom },
+      { onConflict: 'coach_id,effective_from' }
+    )
+
+  if (error) return { error: error.message }
+
+  revalidatePath('/coaches')
+  revalidatePath('/expenses')
+  return { success: true }
 }

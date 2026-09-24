@@ -49,7 +49,7 @@ export function DeletePlayerModal({ isOpen, onClose, onSuccess, player, deleteAc
             .from('fees')
             .select('id, amount')
             .eq('player_id', player.id)
-            .in('status', ['pending', 'overdue'])
+            .eq('status', 'pending')
 
           if (data && data.length > 0) {
             const totalAmount = data.reduce((sum: number, fee: any) => sum + (fee.amount || 0), 0)

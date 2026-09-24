@@ -1,11 +1,13 @@
 "use client";
 
 import React, { useEffect, useState, useCallback } from 'react';
+import Link from 'next/link';
 import { StatCard } from '@/components/ui/StatCard';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { PeriodPicker, PeriodRange, getDefaultPeriod } from '@/components/admin/PeriodPicker';
-import { Users, MapPin, IndianRupee, Activity, UserPlus, AlertCircle, TrendingUp } from 'lucide-react';
+import { Users, MapPin, IndianRupee, Activity, UserPlus, AlertCircle, TrendingUp, TrendingDown, Wallet } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+import { fetchBranchMonthFinances } from '@/lib/orgFinance';
 import { formatDistanceToNow, parseISO, format, eachMonthOfInterval, startOfYear, endOfMonth } from 'date-fns';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Sector } from 'recharts';
 import { useTheme } from '@/context/ThemeContext';
@@ -45,6 +47,8 @@ export function DashboardClient({ branchesMap, initialBranchesCount }: Dashboard
   const [newEnrollments, setNewEnrollments] = useState(0);
   const [pendingDues, setPendingDues] = useState(0);
   const [collectionRate, setCollectionRate] = useState(0);
+  const [netProfit, setNetProfit] = useState(0);
+  const [totalExpenses, setTotalExpenses] = useState(0);
   const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [chartData, setChartData] = useState<ChartData[]>([]);
   const [branchDistribution, setBranchDistribution] = useState<{ name: string; value: number }[]>([]);
@@ -58,6 +62,14 @@ export function DashboardClient({ branchesMap, initialBranchesCount }: Dashboard
 
     const fromDate = p.from;
     const toDate = p.to;
+
+    // All money figures (Revenue, Pending Dues, Collection Rate, Total Expenses, Net Profit) are
+    // scoped by billing month (fees.month) — the same basis the Fees and Expenses pages use — not
+    // by paid_date/created_at. A fee paid in a different month than it was billed for should count
+    // toward the month it was billed for, everywhere in the app, consistently.
+    const periodMonths = Array.from(new Set(
+      eachMonthOfInterval({ start: parseISO(fromDate), end: parseISO(toDate) }).map(m => format(m, 'yyyy-MM'))
+    ));
 
     // Year-to-date range for the chart (always Jan 1 → today, independent of period picker)
     const now = new Date();
@@ -80,8 +92,8 @@ export function DashboardClient({ branchesMap, initialBranchesCount }: Dashboard
       { data: ytdFees },
     ] = await Promise.all([
       supabase.from('players').select('*', { count: 'exact', head: true }).eq('status', 'active'),
-      (supabase as any).from('fees').select('amount, month').eq('status', 'paid').gte('paid_date', fromDate).lte('paid_date', toDate + 'T23:59:59'),
-      (supabase as any).from('fees').select('amount').in('status', ['pending', 'overdue']).gte('created_at', fromDate).lte('created_at', toDate + 'T23:59:59'),
+      (supabase as any).from('fees').select('amount, month').eq('status', 'paid').in('month', periodMonths),
+      (supabase as any).from('fees').select('amount').eq('status', 'pending').in('month', periodMonths),
       (supabase as any).from('attendance').select('*', { count: 'exact', head: true }).eq('status', 'present').gte('date', fromDate).lte('date', toDate),
       (supabase as any).from('attendance').select('*', { count: 'exact', head: true }).gte('date', fromDate).lte('date', toDate),
       supabase.from('players').select('id').gte('enrolled_date', fromDate).lte('enrolled_date', toDate),
@@ -112,6 +124,13 @@ export function DashboardClient({ branchesMap, initialBranchesCount }: Dashboard
 
     // New enrollments
     setNewEnrollments(enrolledPlayers?.length || 0);
+
+    // Net profit across all branches for the selected period (history-aware: uses whatever
+    // rent/salary was actually effective in each of those months, not today's values)
+    const branchIds = Object.keys(branchesMap);
+    const branchMonthFinances = await fetchBranchMonthFinances(supabase, branchIds, periodMonths);
+    setNetProfit(branchMonthFinances.reduce((sum, f) => sum + f.netProfit, 0));
+    setTotalExpenses(branchMonthFinances.reduce((sum, f) => sum + f.totalExpense, 0));
 
     // Chart data: always shows all months Jan → now (year-to-date)
     const revenueByMonth: Record<string, number> = {};
@@ -247,53 +266,82 @@ export function DashboardClient({ branchesMap, initialBranchesCount }: Dashboard
       <div className={`transition-opacity duration-300 ${isLoading ? 'opacity-50' : 'opacity-100'}`}>
         {/* Primary Stats Grid */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 lg:gap-6">
-          <StatCard
-            title="Total Active Players"
-            value={playersCount}
-            icon={Users}
-            iconColor="text-green-500"
-          />
-          <StatCard
-            title="Total Branches"
-            value={branchesCount}
-            icon={MapPin}
-            iconColor="text-blue-500"
-          />
-          <StatCard
-            title="Revenue"
-            value={`₹${revenue.toLocaleString('en-IN')}`}
-            icon={IndianRupee}
-            iconColor="text-emerald-500"
-          />
-          <StatCard
-            title="Avg. Attendance"
-            value={`${attendancePct.toFixed(1)}%`}
-            icon={Activity}
-            iconColor="text-purple-500"
-          />
+          <Link href="/players" className="block">
+            <StatCard
+              title="Total Active Players"
+              value={playersCount}
+              icon={Users}
+              iconColor="text-green-500"
+            />
+          </Link>
+          <Link href="/branches" className="block">
+            <StatCard
+              title="Total Branches"
+              value={branchesCount}
+              icon={MapPin}
+              iconColor="text-blue-500"
+            />
+          </Link>
+          <Link href="/fees" className="block">
+            <StatCard
+              title="Revenue"
+              value={`₹${revenue.toLocaleString('en-IN')}`}
+              icon={IndianRupee}
+              iconColor="text-emerald-500"
+            />
+          </Link>
+          <Link href="/attendance" className="block">
+            <StatCard
+              title="Avg. Attendance"
+              value={`${attendancePct.toFixed(1)}%`}
+              icon={Activity}
+              iconColor="text-purple-500"
+            />
+          </Link>
         </div>
 
         {/* Secondary Stats Grid */}
-        <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4 lg:gap-6 mt-3 md:mt-4 lg:mt-6">
-          <StatCard
-            title="New Enrollments"
-            value={newEnrollments}
-            icon={UserPlus}
-            iconColor="text-cyan-500"
-          />
-          <StatCard
-            title="Pending Dues"
-            value={`₹${pendingDues.toLocaleString('en-IN')}`}
-            icon={AlertCircle}
-            iconColor="text-amber-500"
-          />
-          <StatCard
-            title="Collection Rate"
-            value={`${collectionRate.toFixed(1)}%`}
-            icon={TrendingUp}
-            iconColor="text-teal-500"
-            className="col-span-2 lg:col-span-1"
-          />
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 md:gap-4 lg:gap-6 mt-3 md:mt-4 lg:mt-6">
+          <Link href="/players" className="block">
+            <StatCard
+              title="New Enrollments"
+              value={newEnrollments}
+              icon={UserPlus}
+              iconColor="text-cyan-500"
+            />
+          </Link>
+          <Link href="/fees?status=pending" className="block">
+            <StatCard
+              title="Pending Dues"
+              value={`₹${pendingDues.toLocaleString('en-IN')}`}
+              icon={AlertCircle}
+              iconColor="text-amber-500"
+            />
+          </Link>
+          <Link href="/fees" className="block">
+            <StatCard
+              title="Collection Rate"
+              value={`${collectionRate.toFixed(1)}%`}
+              icon={TrendingUp}
+              iconColor="text-teal-500"
+            />
+          </Link>
+          <Link href="/expenses" className="block">
+            <StatCard
+              title="Total Expenses"
+              value={`₹${totalExpenses.toLocaleString('en-IN')}`}
+              icon={TrendingDown}
+              iconColor="text-red-500"
+            />
+          </Link>
+          <Link href="/expenses" className="block">
+            <StatCard
+              title="Net Profit"
+              value={`₹${netProfit.toLocaleString('en-IN')}`}
+              icon={Wallet}
+              iconColor={netProfit >= 0 ? 'text-green-500' : 'text-red-500'}
+            />
+          </Link>
         </div>
       </div>
 
